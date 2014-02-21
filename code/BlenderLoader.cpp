@@ -584,6 +584,9 @@ void BlenderImporter::BuildMaterials(ConversionData& conv_data)
 
 	for_each(boost::shared_ptr<Material> mat, conv_data.materials_raw) {
 
+		if (!mat)
+			continue;
+
 		// reset per material global counters
 		for (size_t i = 0; i < sizeof(conv_data.next_texture)/sizeof(conv_data.next_texture[0]);++i) {
 			conv_data.next_texture[i] = 0 ;
