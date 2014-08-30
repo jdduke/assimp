@@ -43,6 +43,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef ASSIMP_BUILD_NO_OPENGEX_IMPORTER
 
 #include "BaseImporter.h"
+#include "LogAux.h"
 
 #include <vector>
 
@@ -79,7 +80,7 @@ struct MetricInfo {
  *
  *  See http://opengex.org/OpenGEX.pdf for spec.
  */
-class OpenGEXImporter : public BaseImporter {
+class OpenGEXImporter : public BaseImporter, public LogFunctions<OpenGEXImporter> {
 public:
     /// The class constructor.
     OpenGEXImporter();

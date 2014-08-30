@@ -2,7 +2,7 @@
 Open Asset Import Library (assimp)
 ----------------------------------------------------------------------
 
-Copyright (c) 2006-2014, assimp team
+Copyright (c) 2006-2015, assimp team
 All rights reserved.
 
 Redistribution and use of this software in source and binary forms,
@@ -41,11 +41,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "AssimpPCH.h"
 #include "OpenGEXImporter.h"
-#include "DefaultIOSystem.h"
 
-#include <openddlparser/OpenDDLParser.h>
+#include "OpenGEX.h"
 
-#include <vector>
+namespace Assimp {
+    template<> const std::string LogFunctions<OpenGEX::OpenGEXImporter>::log_prefix = "OpenGEX: ";
+}
 
 static const aiImporterDesc desc = {
     "Open Game Engine Exchange",
@@ -60,172 +61,1678 @@ static const aiImporterDesc desc = {
     "ogex"
 };
 
-namespace Grammar {
-    static const char *MetricType          = "Metric";
-    static const char *Metric_DistanceType = "distance";
-    static const char *Metric_AngleType    = "angle";
-    static const char *Metric_TimeType     = "time";
-    static const char *Metric_UpType       = "up";
-    static const char *NameType            = "Name";
-    static const char *ObjectRefType       = "ObjectRef";
-    static const char *MaterialRefType     = "MaterialRef";
-    static const char *MetricKeyType       = "key";
-    static const char *GeometryNodeType    = "GeometryNode";
-    static const char *GeometryObjectType  = "GeometryObject";
-    static const char *TransformType       = "Transform";
-    static const char *MeshType            = "Mesh";
-    static const char *VertexArrayType     = "VertexArray";
-    static const char *IndexArrayType      = "IndexArray";
-    static const char *MaterialType        = "Material";
-    static const char *ColorType           = "Color";
-    static const char *TextureType         = "Texture";
-
-    enum TokenType {
-        NoneType = -1,
-        MetricToken,
-        NameToken,
-        ObjectRefToken,
-        MaterialRefToken,
-        MetricKeyToken,
-        GeometryNodeToken,
-        GeometryObjectToken,
-        TransformToken,
-        MeshToken,
-        VertexArrayToken,
-        IndexArrayToken,
-        MaterialToken,
-        ColorToken,
-        TextureToken
-    };
-
-    static const char *ValidMetricToken[ 4 ] = {
-        Metric_DistanceType,
-        Metric_AngleType,
-        Metric_TimeType,
-        Metric_UpType
-    };
-
-    static int isValidMetricType( const char *token ) {
-        if( NULL == token ) {
-            return false;
-        }
-
-        int idx( -1 );
-        for( size_t i = 0; i < 4; i++ ) {
-            if( 0 == strncmp( ValidMetricToken[ i ], token, strlen( token ) ) ) {
-                idx = (int) i;
-                break;
-            }
-        }
-
-        return idx;
-    }
-
-    static TokenType matchTokenType( const char *tokenType ) {
-        if( 0 == strncmp( MetricType, tokenType, strlen( tokenType ) ) ) {
-            return MetricToken;
-        } else if( 0 == strncmp( NameType, tokenType, strlen( tokenType ) ) ) {
-            return NameToken;
-        } else if( 0 == strncmp( ObjectRefType, tokenType, strlen( tokenType ) ) ) {
-            return ObjectRefToken;
-        } else if( 0 == strncmp( MaterialRefType, tokenType, strlen( tokenType ) ) ) {
-            return MaterialRefToken; 
-        } else if( 0 == strncmp( MetricKeyType, tokenType, strlen( tokenType ) ) ) {
-            return MetricKeyToken;
-        } else if( 0 == strncmp( GeometryNodeType, tokenType, strlen( tokenType ) ) ) {
-            return GeometryNodeToken;
-        } else if( 0 == strncmp( GeometryObjectType, tokenType, strlen( tokenType ) ) ) {
-            return GeometryObjectToken;
-        } else if( 0 == strncmp( TransformType, tokenType, strlen( tokenType ) ) ) {
-            return TransformToken;
-        } else if( 0 == strncmp( MeshType, tokenType, strlen( tokenType ) ) ) {
-            return MeshToken;
-        } else if( 0 == strncmp( VertexArrayType, tokenType, strlen( tokenType ) ) ) {
-            return VertexArrayToken;
-        } else if( 0 == strncmp( IndexArrayType, tokenType, strlen( tokenType ) ) ) {
-            return IndexArrayToken;
-        } else if( 0 == strncmp( MaterialType, tokenType, strlen( tokenType ) ) ) {
-            return MaterialToken;
-        } else if( 0 == strncmp( ColorType, tokenType, strlen( tokenType ) ) ) {
-            return ColorToken;
-        } else if( 0 == strncmp( TextureType, tokenType, strlen( tokenType ) ) ) {
-            return TextureToken;
-        }
-
-        return NoneType;
-    }
-
-} // Namespace Grammar
+using namespace ODDL;
+using namespace OGEX;
 
 namespace Assimp {
 namespace OpenGEX {
 
-USE_ODDLPARSER_NS
+namespace {
 
-//------------------------------------------------------------------------------------------------
-OpenGEXImporter::RefInfo::RefInfo( aiNode *node, Type type, std::vector<std::string> &names )
-: m_node( node )
-, m_type( type )
-, m_Names( names ) {
-    // empty
+template<typename T>
+struct delete_fun
+{
+    void operator()(const volatile T* del) {
+        delete del;
+    }
+};
+
+/** Dummy class to encapsulate the conversion process */
+class Converter
+{
+public:
+
+    /** the different parts that make up the final local transformation of a fbx node */
+    enum TransformationComp
+    {
+        TransformationComp_Translation = 0,
+        TransformationComp_RotationOffset,
+        TransformationComp_RotationPivot,
+        TransformationComp_PreRotation,
+        TransformationComp_Rotation,
+        TransformationComp_PostRotation,
+        TransformationComp_RotationPivotInverse,
+        TransformationComp_ScalingOffset,
+        TransformationComp_ScalingPivot,
+        TransformationComp_Scaling,
+        TransformationComp_ScalingPivotInverse,
+        TransformationComp_GeometricTranslation,
+        TransformationComp_GeometricRotation,
+        TransformationComp_GeometricScaling,
+
+        TransformationComp_MAXIMUM
+    };
+
+public:
+
+    Converter(aiScene* out, const OpenGexDataDescription& desc)
+        : defaultMaterialIndex()
+        , out(out)
+        , desc(desc)
+    {
+        ConvertRootNode();
+
+        TransferDataToScene();
+
+        // if we didn't read any meshes set the AI_SCENE_FLAGS_INCOMPLETE
+        // to make sure the scene passes assimp's validation. FBX files
+        // need not contain geometry (i.e. camera animations, raw armatures).
+        if (out->mNumMeshes == 0) {
+            out->mFlags |= AI_SCENE_FLAGS_INCOMPLETE;
+        }
+    }
+
+    ~Converter()
+    {
+        std::for_each(meshes.begin(), meshes.end(), delete_fun<aiMesh>());
+        std::for_each(materials.begin(), materials.end(), delete_fun<aiMaterial>());
+        std::for_each(animations.begin(), animations.end(), delete_fun<aiAnimation>());
+        std::for_each(lights.begin(), lights.end(), delete_fun<aiLight>());
+        std::for_each(cameras.begin(), cameras.end(), delete_fun<aiCamera>());
+    }
+
+
+private:
+
+    // ------------------------------------------------------------------------------------------------
+    // find scene root and trigger recursive scene conversion
+    void ConvertRootNode()
+    {
+        out->mRootNode = new aiNode();
+        out->mRootNode->mName.Set("RootNode");
+
+        // root has ID 0
+        ConvertStructures(desc.GetRootStructure(), *out->mRootNode);
+    }
+
+    // collect and assign child nodes
+    void ConvertStructures(const Structure* structureParent, aiNode& parent, const aiMatrix4x4& parent_transform = aiMatrix4x4())
+    {
+        const Structure* structure = structureParent->GetFirstSubnode();
+
+        std::vector<aiNode*> nodes;
+        std::vector<aiNode*> nodes_chain;
+
+        try {
+            while (structure) {
+                /*
+                const Model* const model = dynamic_cast<const Model*>(object);
+
+                if(model) {
+                    nodes_chain.clear();
+
+                    aiMatrix4x4 new_abs_transform = parent_transform;
+
+                    // even though there is only a single input node, the design of
+                    // assimp (or rather: the complicated transformation chain that
+                    // is employed by fbx) means that we may need multiple aiNode's
+                    // to represent a fbx node's transformation.
+                    GenerateTransformationNodeChain(*model,nodes_chain);
+
+                    ai_assert(nodes_chain.size());
+
+                    const std::string& original_name = FixNodeName(model->Name());
+
+                    // check if any of the nodes in the chain has the name the fbx node
+                    // is supposed to have. If there is none, add another node to 
+                    // preserve the name - people might have scripts etc. that rely
+                    // on specific node names.
+                    aiNode* name_carrier = NULL;
+                    BOOST_FOREACH(aiNode* prenode, nodes_chain) {
+                        if ( !strcmp(prenode->mName.C_Str(), original_name.c_str()) ) {
+                            name_carrier = prenode;
+                            break;
+                        }
+                    }
+
+                    if(!name_carrier) {
+                        nodes_chain.push_back(new aiNode(original_name));
+                        name_carrier = nodes_chain.back();
+                    }
+
+                    //setup metadata on newest node
+                    SetupNodeMetadata(*model, *nodes_chain.back());
+
+                    // link all nodes in a row
+                    aiNode* last_parent = &parent;
+                    BOOST_FOREACH(aiNode* prenode, nodes_chain) {
+                        ai_assert(prenode);
+
+                        if(last_parent != &parent) {
+                            last_parent->mNumChildren = 1;
+                            last_parent->mChildren = new aiNode*[1];
+                            last_parent->mChildren[0] = prenode;
+                        }
+
+                        prenode->mParent = last_parent;
+                        last_parent = prenode;
+
+                        new_abs_transform *= prenode->mTransformation;
+                    }
+
+                    // attach geometry
+                    ConvertModel(*model, *nodes_chain.back(), new_abs_transform);
+
+                    // attach sub-nodes
+                    ConvertNodes(model->ID(), *nodes_chain.back(), new_abs_transform);
+
+                    if(doc.Settings().readLights) {
+                        ConvertLights(*model);
+                    }
+
+                    if(doc.Settings().readCameras) {
+                        ConvertCameras(*model);
+                    }
+
+                    nodes.push_back(nodes_chain.front());
+                    nodes_chain.clear();
+                }
+                */
+                structure = structure->Next();
+            }
+
+            if(nodes.size()) {
+                parent.mChildren = new aiNode*[nodes.size()]();
+                parent.mNumChildren = static_cast<unsigned int>(nodes.size());
+
+                std::swap_ranges(nodes.begin(),nodes.end(),parent.mChildren);
+            }
+        }
+        catch(std::exception&)  {
+            delete_fun<aiNode> deleter;
+            std::for_each(nodes.begin(), nodes.end(), deleter);
+            std::for_each(nodes_chain.begin(), nodes_chain.end(), deleter);
+        }
+    }
+
+    /*
+    // ------------------------------------------------------------------------------------------------
+    void ConvertLights(const Model& model)
+    {
+        const std::vector<const NodeAttribute*>& node_attrs = model.GetAttributes();
+        BOOST_FOREACH(const NodeAttribute* attr, node_attrs) {
+            const Light* const light = dynamic_cast<const Light*>(attr);
+            if(light) {
+                ConvertLight(model, *light);
+            }
+        }
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    void ConvertCameras(const Model& model)
+    {
+        const std::vector<const NodeAttribute*>& node_attrs = model.GetAttributes();
+        BOOST_FOREACH(const NodeAttribute* attr, node_attrs) {
+            const Camera* const cam = dynamic_cast<const Camera*>(attr);
+            if(cam) {
+                ConvertCamera(model, *cam);
+            }
+        }
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    void ConvertLight(const Model& model, const Light& light)
+    {
+        lights.push_back(new aiLight());
+        aiLight* const out_light = lights.back();
+
+        out_light->mName.Set(FixNodeName(model.Name()));
+
+        const float intensity = light.Intensity();
+        const aiVector3D& col = light.Color();
+
+        out_light->mColorDiffuse = aiColor3D(col.x,col.y,col.z);
+        out_light->mColorDiffuse.r *= intensity;
+        out_light->mColorDiffuse.g *= intensity;
+        out_light->mColorDiffuse.b *= intensity;
+
+        out_light->mColorSpecular = out_light->mColorDiffuse;
+
+        switch(light.LightType())
+        {
+        case Light::Type_Point:
+            out_light->mType = aiLightSource_POINT;
+            break;
+
+        case Light::Type_Directional:
+            out_light->mType = aiLightSource_DIRECTIONAL;
+            break;
+
+        case Light::Type_Spot:
+            out_light->mType = aiLightSource_SPOT;
+            out_light->mAngleOuterCone = AI_DEG_TO_RAD(light.OuterAngle());
+            out_light->mAngleInnerCone = AI_DEG_TO_RAD(light.InnerAngle());
+            break;
+
+        case Light::Type_Area:
+            FBXImporter::LogWarn("cannot represent area light, set to UNDEFINED");
+            out_light->mType = aiLightSource_UNDEFINED;
+            break;
+
+        case Light::Type_Volume:
+            FBXImporter::LogWarn("cannot represent volume light, set to UNDEFINED");
+            out_light->mType = aiLightSource_UNDEFINED;
+            break;
+        default:
+            ai_assert(false);
+        }
+
+        // XXX: how to best convert the near and far decay ranges?
+        switch(light.DecayType())
+        {
+        case Light::Decay_None:
+            out_light->mAttenuationConstant = 1.0f;
+            break;
+        case Light::Decay_Linear:
+            out_light->mAttenuationLinear = 1.0f;
+            break;
+        case Light::Decay_Quadratic:
+            out_light->mAttenuationQuadratic = 1.0f;
+            break;
+        case Light::Decay_Cubic:
+            FBXImporter::LogWarn("cannot represent cubic attenuation, set to Quadratic");
+            out_light->mAttenuationQuadratic = 1.0f;
+            break;
+        default:
+            ai_assert(false);
+        }
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    void ConvertCamera(const Model& model, const Camera& cam)
+    {
+        cameras.push_back(new aiCamera());
+        aiCamera* const out_camera = cameras.back();
+
+        out_camera->mName.Set(FixNodeName(model.Name()));
+
+        out_camera->mAspect = cam.AspectWidth() / cam.AspectHeight();
+        out_camera->mPosition = cam.Position();
+        out_camera->mLookAt = cam.InterestPosition() - out_camera->mPosition;
+
+        // BUG HERE cam.FieldOfView() returns 1.0f every time.  1.0f is default value.
+        out_camera->mHorizontalFOV = AI_DEG_TO_RAD(cam.FieldOfView());
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    aiVector3D TransformationCompDefaultValue(TransformationComp comp)
+    {
+        // XXX a neat way to solve the never-ending special cases for scaling 
+        // would be to do everything in log space!
+        return comp == TransformationComp_Scaling ? aiVector3D(1.f,1.f,1.f) : aiVector3D();
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    void GetRotationMatrix(Model::RotOrder mode, const aiVector3D& rotation, aiMatrix4x4& out)
+    {
+        if(mode == Model::RotOrder_SphericXYZ) {
+            FBXImporter::LogError("Unsupported RotationMode: SphericXYZ");
+            out = aiMatrix4x4();
+            return;
+        }
+
+        const float angle_epsilon = 1e-6f;
+
+        out = aiMatrix4x4();
+
+        bool is_id[3] = { true, true, true };
+
+        aiMatrix4x4 temp[3];
+        if(fabs(rotation.z) > angle_epsilon) {
+            aiMatrix4x4::RotationZ(AI_DEG_TO_RAD(rotation.z),temp[2]);
+            is_id[2] = false;
+        }
+        if(fabs(rotation.y) > angle_epsilon) {
+            aiMatrix4x4::RotationY(AI_DEG_TO_RAD(rotation.y),temp[1]);
+            is_id[1] = false;
+        }
+        if(fabs(rotation.x) > angle_epsilon) {
+            aiMatrix4x4::RotationX(AI_DEG_TO_RAD(rotation.x),temp[0]);
+            is_id[0] = false;
+        }
+
+        int order[3] = {-1, -1, -1};
+
+        // note: rotation order is inverted since we're left multiplying as is usual in assimp
+        switch(mode)
+        {
+        case Model::RotOrder_EulerXYZ:
+            order[0] = 2;
+            order[1] = 1;
+            order[2] = 0;
+            break;
+
+        case Model::RotOrder_EulerXZY: 
+            order[0] = 1;
+            order[1] = 2;
+            order[2] = 0;
+            break;
+
+        case Model::RotOrder_EulerYZX:
+            order[0] = 0;
+            order[1] = 2;
+            order[2] = 1;
+            break;
+
+        case Model::RotOrder_EulerYXZ: 
+            order[0] = 2;
+            order[1] = 0;
+            order[2] = 1;
+            break;
+
+        case Model::RotOrder_EulerZXY: 
+            order[0] = 1;
+            order[1] = 0;
+            order[2] = 2;
+            break;
+
+        case Model::RotOrder_EulerZYX:
+            order[0] = 0;
+            order[1] = 1;
+            order[2] = 2;
+            break;
+
+            default:
+                ai_assert(false);
+        }
+        
+        ai_assert((order[0] >= 0) && (order[0] <= 2));
+        ai_assert((order[1] >= 0) && (order[1] <= 2));
+        ai_assert((order[2] >= 0) && (order[2] <= 2));
+
+        if(!is_id[order[0]]) {
+            out = temp[order[0]];
+        }
+
+        if(!is_id[order[1]]) {
+            out = out * temp[order[1]];
+        }
+
+        if(!is_id[order[2]]) {
+            out = out * temp[order[2]];
+        }
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    // checks if a node has more than just scaling, rotation and translation components
+    bool NeedsComplexTransformationChain(const Model& model)
+    {
+        const PropertyTable& props = model.Props();
+        bool ok;
+
+        const float zero_epsilon = 1e-6f;
+        for (size_t i = 0; i < TransformationComp_MAXIMUM; ++i) {
+            const TransformationComp comp = static_cast<TransformationComp>(i);
+
+            if( comp == TransformationComp_Rotation || comp == TransformationComp_Scaling || comp == TransformationComp_Translation ||
+                comp == TransformationComp_GeometricScaling || comp == TransformationComp_GeometricRotation || comp == TransformationComp_GeometricTranslation ) { 
+                continue;
+            }
+
+            const aiVector3D& v = PropertyGet<aiVector3D>(props,NameTransformationCompProperty(comp),ok);
+            if(ok && v.SquareLength() > zero_epsilon) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    // note: name must be a FixNodeName() result
+    std::string NameTransformationChainNode(const std::string& name, TransformationComp comp)
+    {
+        return name + std::string(MAGIC_NODE_TAG) + "_" + NameTransformationComp(comp);
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    // note: memory for output_nodes will be managed by the caller
+    void GenerateTransformationNodeChain(const Model& model,
+        std::vector<aiNode*>& output_nodes)
+    {
+        const PropertyTable& props = model.Props();
+        const Model::RotOrder rot = model.RotationOrder();
+
+        bool ok;
+
+        aiMatrix4x4 chain[TransformationComp_MAXIMUM];
+        std::fill_n(chain, static_cast<unsigned int>(TransformationComp_MAXIMUM), aiMatrix4x4());
+
+        // generate transformation matrices for all the different transformation components
+        const float zero_epsilon = 1e-6f;
+        bool is_complex = false;
+
+        const aiVector3D& PreRotation = PropertyGet<aiVector3D>(props,"PreRotation",ok);
+        if(ok && PreRotation.SquareLength() > zero_epsilon) {
+            is_complex = true;
+
+            GetRotationMatrix(rot, PreRotation, chain[TransformationComp_PreRotation]);
+        }
+
+        const aiVector3D& PostRotation = PropertyGet<aiVector3D>(props,"PostRotation",ok);
+        if(ok && PostRotation.SquareLength() > zero_epsilon) {
+            is_complex = true;
+
+            GetRotationMatrix(rot, PostRotation, chain[TransformationComp_PostRotation]);
+        }
+
+        const aiVector3D& RotationPivot = PropertyGet<aiVector3D>(props,"RotationPivot",ok);
+        if(ok && RotationPivot.SquareLength() > zero_epsilon) {
+            is_complex = true;
+            
+            aiMatrix4x4::Translation(RotationPivot,chain[TransformationComp_RotationPivot]);
+            aiMatrix4x4::Translation(-RotationPivot,chain[TransformationComp_RotationPivotInverse]);
+        }
+
+        const aiVector3D& RotationOffset = PropertyGet<aiVector3D>(props,"RotationOffset",ok);
+        if(ok && RotationOffset.SquareLength() > zero_epsilon) {
+            is_complex = true;
+
+            aiMatrix4x4::Translation(RotationOffset,chain[TransformationComp_RotationOffset]);
+        }
+
+        const aiVector3D& ScalingOffset = PropertyGet<aiVector3D>(props,"ScalingOffset",ok);
+        if(ok && ScalingOffset.SquareLength() > zero_epsilon) {
+            is_complex = true;
+            
+            aiMatrix4x4::Translation(ScalingOffset,chain[TransformationComp_ScalingOffset]);
+        }
+
+        const aiVector3D& ScalingPivot = PropertyGet<aiVector3D>(props,"ScalingPivot",ok);
+        if(ok && ScalingPivot.SquareLength() > zero_epsilon) {
+            is_complex = true;
+
+            aiMatrix4x4::Translation(ScalingPivot,chain[TransformationComp_ScalingPivot]);
+            aiMatrix4x4::Translation(-ScalingPivot,chain[TransformationComp_ScalingPivotInverse]);
+        }
+
+        const aiVector3D& Translation = PropertyGet<aiVector3D>(props,"Lcl Translation",ok);
+        if(ok && Translation.SquareLength() > zero_epsilon) {
+            aiMatrix4x4::Translation(Translation,chain[TransformationComp_Translation]);
+        }
+
+        const aiVector3D& Scaling = PropertyGet<aiVector3D>(props,"Lcl Scaling",ok);
+        if(ok && fabs(Scaling.SquareLength()-1.0f) > zero_epsilon) {
+            aiMatrix4x4::Scaling(Scaling,chain[TransformationComp_Scaling]);
+        }
+
+        const aiVector3D& Rotation = PropertyGet<aiVector3D>(props,"Lcl Rotation",ok);
+        if(ok && Rotation.SquareLength() > zero_epsilon) {
+            GetRotationMatrix(rot, Rotation, chain[TransformationComp_Rotation]);
+        }
+        
+        const aiVector3D& GeometricScaling = PropertyGet<aiVector3D>(props, "GeometricScaling", ok);
+        if (ok && fabs(GeometricScaling.SquareLength() - 1.0f) > zero_epsilon) {
+            aiMatrix4x4::Scaling(GeometricScaling, chain[TransformationComp_GeometricScaling]);
+        }
+        
+        const aiVector3D& GeometricRotation = PropertyGet<aiVector3D>(props, "GeometricRotation", ok);
+        if (ok && GeometricRotation.SquareLength() > zero_epsilon) {
+            GetRotationMatrix(rot, GeometricRotation, chain[TransformationComp_GeometricRotation]);
+        }
+
+        const aiVector3D& GeometricTranslation = PropertyGet<aiVector3D>(props, "GeometricTranslation", ok);
+        if (ok && GeometricTranslation.SquareLength() > zero_epsilon){
+            aiMatrix4x4::Translation(GeometricTranslation, chain[TransformationComp_GeometricTranslation]);
+        }
+
+        // is_complex needs to be consistent with NeedsComplexTransformationChain()
+        // or the interplay between this code and the animation converter would
+        // not be guaranteed.
+        ai_assert(NeedsComplexTransformationChain(model) == is_complex);
+
+        const std::string& name = FixNodeName(model.Name());
+
+        // now, if we have more than just Translation, Scaling and Rotation,
+        // we need to generate a full node chain to accommodate for assimp's
+        // lack to express pivots and offsets.
+        if(is_complex && doc.Settings().preservePivots) {
+            FBXImporter::LogInfo("generating full transformation chain for node: " + name);
+
+            // query the anim_chain_bits dictionary to find out which chain elements
+            // have associated node animation channels. These can not be dropped 
+            // even if they have identity transform in bind pose.
+            NodeAnimBitMap::const_iterator it = node_anim_chain_bits.find(name);
+            const unsigned int anim_chain_bitmask = (it == node_anim_chain_bits.end() ? 0 : (*it).second);
+
+            unsigned int bit = 0x1;
+            for (size_t i = 0; i < TransformationComp_MAXIMUM; ++i, bit <<= 1) {
+                const TransformationComp comp = static_cast<TransformationComp>(i);
+                
+                if (chain[i].IsIdentity() && (anim_chain_bitmask & bit) == 0) {
+                    continue;
+                }
+
+                aiNode* nd = new aiNode();
+                output_nodes.push_back(nd);
+                
+                nd->mName.Set(NameTransformationChainNode(name, comp));
+                nd->mTransformation = chain[i];
+            }
+
+            ai_assert(output_nodes.size());
+            return;
+        }
+
+        // else, we can just multiply the matrices together
+        aiNode* nd = new aiNode();
+        output_nodes.push_back(nd);
+
+        nd->mName.Set(name);
+
+        for (size_t i = 0; i < TransformationComp_MAXIMUM; ++i) {
+            nd->mTransformation = nd->mTransformation * chain[i];
+        }
+    }
+    
+    // ------------------------------------------------------------------------------------------------
+
+    void SetupNodeMetadata(const Model& model, aiNode& nd)
+    {
+        const PropertyTable& props = model.Props();
+        DirectPropertyMap unparsedProperties = props.GetUnparsedProperties();
+
+        // create metadata on node
+        std::size_t numStaticMetaData = 2;
+        aiMetadata* data = new aiMetadata();
+        data->mNumProperties = unparsedProperties.size() + numStaticMetaData;
+        data->mKeys = new aiString[data->mNumProperties]();
+        data->mValues = new aiMetadataEntry[data->mNumProperties]();
+        nd.mMetaData = data;
+        int index = 0;
+
+        // find user defined properties (3ds Max)
+        data->Set(index++, "UserProperties", aiString(PropertyGet<std::string>(props, "UDP3DSMAX", "")));
+        // preserve the info that a node was marked as Null node in the original file.
+        data->Set(index++, "IsNull", model.IsNull() ? true : false);
+
+        // add unparsed properties to the node's metadata
+        BOOST_FOREACH(const DirectPropertyMap::value_type& prop, unparsedProperties) {
+
+            // Interpret the property as a concrete type
+            if (const TypedProperty<bool>* interpreted = prop.second->As<TypedProperty<bool> >())
+                data->Set(index++, prop.first, interpreted->Value());
+            else if (const TypedProperty<int>* interpreted = prop.second->As<TypedProperty<int> >())
+                data->Set(index++, prop.first, interpreted->Value());
+            else if (const TypedProperty<uint64_t>* interpreted = prop.second->As<TypedProperty<uint64_t> >())
+                data->Set(index++, prop.first, interpreted->Value());
+            else if (const TypedProperty<float>* interpreted = prop.second->As<TypedProperty<float> >())
+                data->Set(index++, prop.first, interpreted->Value());
+            else if (const TypedProperty<std::string>* interpreted = prop.second->As<TypedProperty<std::string> >())
+                data->Set(index++, prop.first, aiString(interpreted->Value()));
+            else if (const TypedProperty<aiVector3D>* interpreted = prop.second->As<TypedProperty<aiVector3D> >())
+                data->Set(index++, prop.first, interpreted->Value());
+            else
+                assert(false);
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    void ConvertModel(const Model& model, aiNode& nd, const aiMatrix4x4& node_global_transform)
+    {
+        const std::vector<const Geometry*>& geos = model.GetGeometry();
+
+        std::vector<unsigned int> meshes;
+        meshes.reserve(geos.size());
+
+        BOOST_FOREACH(const Geometry* geo, geos) {
+
+            const MeshGeometry* const mesh = dynamic_cast<const MeshGeometry*>(geo);
+            if(mesh) {
+                const std::vector<unsigned int>& indices = ConvertMesh(*mesh, model, node_global_transform);
+                std::copy(indices.begin(),indices.end(),std::back_inserter(meshes) );
+            }
+            else {
+                FBXImporter::LogWarn("ignoring unrecognized geometry: " + geo->Name());
+            }
+        }
+
+        if(meshes.size()) {
+            nd.mMeshes = new unsigned int[meshes.size()]();
+            nd.mNumMeshes = static_cast<unsigned int>(meshes.size());
+
+            std::swap_ranges(meshes.begin(),meshes.end(),nd.mMeshes);
+        }
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    // MeshGeometry -> aiMesh, return mesh index + 1 or 0 if the conversion failed
+    std::vector<unsigned int> ConvertMesh(const MeshGeometry& mesh,const Model& model, 
+        const aiMatrix4x4& node_global_transform)
+    {
+        std::vector<unsigned int> temp; 
+
+        MeshMap::const_iterator it = meshes_converted.find(&mesh);
+        if (it != meshes_converted.end()) {
+            std::copy((*it).second.begin(),(*it).second.end(),std::back_inserter(temp));
+            return temp;
+        }
+
+        const std::vector<aiVector3D>& vertices = mesh.GetVertices();
+        const std::vector<unsigned int>& faces = mesh.GetFaceIndexCounts();
+        if(vertices.empty() || faces.empty()) {
+            FBXImporter::LogWarn("ignoring empty geometry: " + mesh.Name());
+            return temp;
+        }
+
+        // one material per mesh maps easily to aiMesh. Multiple material 
+        // meshes need to be split.
+        const MatIndexArray& mindices = mesh.GetMaterialIndices();
+        if (doc.Settings().readMaterials && !mindices.empty()) {
+            const MatIndexArray::value_type base = mindices[0];
+            BOOST_FOREACH(MatIndexArray::value_type index, mindices) {
+                if(index != base) {
+                    return ConvertMeshMultiMaterial(mesh, model, node_global_transform);
+                }
+            }
+        }
+
+        // faster codepath, just copy the data
+        temp.push_back(ConvertMeshSingleMaterial(mesh, model, node_global_transform));
+        return temp;
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    aiMesh* SetupEmptyMesh(const MeshGeometry& mesh)
+    {
+        aiMesh* const out_mesh = new aiMesh();
+        meshes.push_back(out_mesh);
+        meshes_converted[&mesh].push_back(static_cast<unsigned int>(meshes.size()-1));
+
+        // set name
+        std::string name = mesh.Name();
+        if (name.substr(0,10) == "Geometry::") {
+            name = name.substr(10);
+        }
+
+        if(name.length()) {
+            out_mesh->mName.Set(name);
+        }
+
+        return out_mesh;
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    unsigned int ConvertMeshSingleMaterial(const MeshGeometry& mesh, const Model& model, 
+        const aiMatrix4x4& node_global_transform)   
+    {
+        const MatIndexArray& mindices = mesh.GetMaterialIndices();
+        aiMesh* const out_mesh = SetupEmptyMesh(mesh); 
+
+        const std::vector<aiVector3D>& vertices = mesh.GetVertices();
+        const std::vector<unsigned int>& faces = mesh.GetFaceIndexCounts();
+
+        // copy vertices
+        out_mesh->mNumVertices = static_cast<unsigned int>(vertices.size());
+        out_mesh->mVertices = new aiVector3D[vertices.size()];
+        std::copy(vertices.begin(),vertices.end(),out_mesh->mVertices);
+
+        // generate dummy faces
+        out_mesh->mNumFaces = static_cast<unsigned int>(faces.size());
+        aiFace* fac = out_mesh->mFaces = new aiFace[faces.size()]();
+
+        unsigned int cursor = 0;
+        BOOST_FOREACH(unsigned int pcount, faces) {
+            aiFace& f = *fac++;
+            f.mNumIndices = pcount;
+            f.mIndices = new unsigned int[pcount];
+            switch(pcount) 
+            {
+            case 1:
+                out_mesh->mPrimitiveTypes |= aiPrimitiveType_POINT;
+                break;
+            case 2:
+                out_mesh->mPrimitiveTypes |= aiPrimitiveType_LINE;
+                break;
+            case 3:
+                out_mesh->mPrimitiveTypes |= aiPrimitiveType_TRIANGLE;
+                break;
+            default:
+                out_mesh->mPrimitiveTypes |= aiPrimitiveType_POLYGON;
+                break;
+            }
+            for (unsigned int i = 0; i < pcount; ++i) {
+                f.mIndices[i] = cursor++;
+            }
+        }
+
+        // copy normals
+        const std::vector<aiVector3D>& normals = mesh.GetNormals();
+        if(normals.size()) {
+            ai_assert(normals.size() == vertices.size());
+
+            out_mesh->mNormals = new aiVector3D[vertices.size()];
+            std::copy(normals.begin(),normals.end(),out_mesh->mNormals);
+        }
+
+        // copy tangents - assimp requires both tangents and bitangents (binormals)
+        // to be present, or neither of them. Compute binormals from normals
+        // and tangents if needed.
+        const std::vector<aiVector3D>& tangents = mesh.GetTangents();
+        const std::vector<aiVector3D>* binormals = &mesh.GetBinormals();
+
+        if(tangents.size()) {
+            std::vector<aiVector3D> tempBinormals;
+            if (!binormals->size()) {
+                if (normals.size()) {
+                    tempBinormals.resize(normals.size());
+                    for (unsigned int i = 0; i < tangents.size(); ++i) {
+                        tempBinormals[i] = normals[i] ^ tangents[i];
+                    }
+
+                    binormals = &tempBinormals;
+                }
+                else {
+                    binormals = NULL;   
+                }
+            }
+
+            if(binormals) {
+                ai_assert(tangents.size() == vertices.size() && binormals->size() == vertices.size());
+
+                out_mesh->mTangents = new aiVector3D[vertices.size()];
+                std::copy(tangents.begin(),tangents.end(),out_mesh->mTangents);
+
+                out_mesh->mBitangents = new aiVector3D[vertices.size()];
+                std::copy(binormals->begin(),binormals->end(),out_mesh->mBitangents);
+            }
+        }
+
+        // copy texture coords
+        for (unsigned int i = 0; i < AI_MAX_NUMBER_OF_TEXTURECOORDS; ++i) {
+            const std::vector<aiVector2D>& uvs = mesh.GetTextureCoords(i);
+            if(uvs.empty()) {
+                break;
+            }
+
+            aiVector3D* out_uv = out_mesh->mTextureCoords[i] = new aiVector3D[vertices.size()];
+            BOOST_FOREACH(const aiVector2D& v, uvs) {
+                *out_uv++ = aiVector3D(v.x,v.y,0.0f);
+            }
+
+            out_mesh->mNumUVComponents[i] = 2;
+        }
+
+        // copy vertex colors
+        for (unsigned int i = 0; i < AI_MAX_NUMBER_OF_COLOR_SETS; ++i) {
+            const std::vector<aiColor4D>& colors = mesh.GetVertexColors(i);
+            if(colors.empty()) {
+                break;
+            }
+
+            out_mesh->mColors[i] = new aiColor4D[vertices.size()];
+            std::copy(colors.begin(),colors.end(),out_mesh->mColors[i]);
+        }
+
+        if(!doc.Settings().readMaterials || mindices.empty()) {
+            FBXImporter::LogError("no material assigned to mesh, setting default material");
+            out_mesh->mMaterialIndex = GetDefaultMaterial();
+        }
+        else {
+            ConvertMaterialForMesh(out_mesh,model,mesh,mindices[0]);
+        }
+
+        if(doc.Settings().readWeights && mesh.DeformerSkin() != NULL) {
+            ConvertWeights(out_mesh, model, mesh, node_global_transform, NO_MATERIAL_SEPARATION);
+        }
+
+        return static_cast<unsigned int>(meshes.size() - 1);
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    std::vector<unsigned int> ConvertMeshMultiMaterial(const MeshGeometry& mesh, const Model& model, 
+        const aiMatrix4x4& node_global_transform)   
+    {
+        const MatIndexArray& mindices = mesh.GetMaterialIndices();
+        ai_assert(mindices.size());
+    
+        std::set<MatIndexArray::value_type> had;
+        std::vector<unsigned int> indices;
+
+        BOOST_FOREACH(MatIndexArray::value_type index, mindices) {
+            if(had.find(index) == had.end()) {
+
+                indices.push_back(ConvertMeshMultiMaterial(mesh, model, index, node_global_transform));
+                had.insert(index);
+            }
+        }
+
+        return indices;
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    unsigned int ConvertMeshMultiMaterial(const MeshGeometry& mesh, const Model& model, 
+        MatIndexArray::value_type index, 
+        const aiMatrix4x4& node_global_transform)   
+    {
+        aiMesh* const out_mesh = SetupEmptyMesh(mesh);
+
+        const MatIndexArray& mindices = mesh.GetMaterialIndices();
+        const std::vector<aiVector3D>& vertices = mesh.GetVertices();
+        const std::vector<unsigned int>& faces = mesh.GetFaceIndexCounts();
+
+        const bool process_weights = doc.Settings().readWeights && mesh.DeformerSkin() != NULL;
+
+        unsigned int count_faces = 0;
+        unsigned int count_vertices = 0;
+
+        // count faces
+        std::vector<unsigned int>::const_iterator itf = faces.begin();
+        for(MatIndexArray::const_iterator it = mindices.begin(), 
+            end = mindices.end(); it != end; ++it, ++itf) 
+        {   
+            if ((*it) != index) {
+                continue;
+            }
+            ++count_faces;
+            count_vertices += *itf;
+        }
+
+        ai_assert(count_faces);
+        ai_assert(count_vertices);
+
+        // mapping from output indices to DOM indexing, needed to resolve weights
+        std::vector<unsigned int> reverseMapping;
+
+        if (process_weights) {
+            reverseMapping.resize(count_vertices);
+        }
+
+        // allocate output data arrays, but don't fill them yet
+        out_mesh->mNumVertices = count_vertices;
+        out_mesh->mVertices = new aiVector3D[count_vertices];
+
+        out_mesh->mNumFaces = count_faces;
+        aiFace* fac = out_mesh->mFaces = new aiFace[count_faces]();
+
+
+        // allocate normals
+        const std::vector<aiVector3D>& normals = mesh.GetNormals();
+        if(normals.size()) {
+            ai_assert(normals.size() == vertices.size());
+            out_mesh->mNormals = new aiVector3D[vertices.size()];
+        }
+
+        // allocate tangents, binormals. 
+        const std::vector<aiVector3D>& tangents = mesh.GetTangents();
+        const std::vector<aiVector3D>* binormals = &mesh.GetBinormals();
+
+        if(tangents.size()) {
+            std::vector<aiVector3D> tempBinormals;
+            if (!binormals->size()) {
+                if (normals.size()) {
+                    // XXX this computes the binormals for the entire mesh, not only 
+                    // the part for which we need them.
+                    tempBinormals.resize(normals.size());
+                    for (unsigned int i = 0; i < tangents.size(); ++i) {
+                        tempBinormals[i] = normals[i] ^ tangents[i];
+                    }
+
+                    binormals = &tempBinormals;
+                }
+                else {
+                    binormals = NULL;   
+                }
+            }
+
+            if(binormals) {
+                ai_assert(tangents.size() == vertices.size() && binormals->size() == vertices.size());
+
+                out_mesh->mTangents = new aiVector3D[vertices.size()];
+                out_mesh->mBitangents = new aiVector3D[vertices.size()];
+            }
+        }
+
+        // allocate texture coords
+        unsigned int num_uvs = 0;
+        for (unsigned int i = 0; i < AI_MAX_NUMBER_OF_TEXTURECOORDS; ++i, ++num_uvs) {
+            const std::vector<aiVector2D>& uvs = mesh.GetTextureCoords(i);
+            if(uvs.empty()) {
+                break;
+            }
+
+            out_mesh->mTextureCoords[i] = new aiVector3D[vertices.size()];
+            out_mesh->mNumUVComponents[i] = 2;
+        }
+
+        // allocate vertex colors
+        unsigned int num_vcs = 0;
+        for (unsigned int i = 0; i < AI_MAX_NUMBER_OF_COLOR_SETS; ++i, ++num_vcs) {
+            const std::vector<aiColor4D>& colors = mesh.GetVertexColors(i);
+            if(colors.empty()) {
+                break;
+            }
+
+            out_mesh->mColors[i] = new aiColor4D[vertices.size()];
+        }
+
+        unsigned int cursor = 0, in_cursor = 0;
+
+        itf = faces.begin();
+        for(MatIndexArray::const_iterator it = mindices.begin(), 
+            end = mindices.end(); it != end; ++it, ++itf) 
+        {   
+            const unsigned int pcount = *itf;
+            if ((*it) != index) {
+                in_cursor += pcount;
+                continue;
+            }
+
+            aiFace& f = *fac++;
+
+            f.mNumIndices = pcount;
+            f.mIndices = new unsigned int[pcount];
+            switch(pcount) 
+            {
+            case 1:
+                out_mesh->mPrimitiveTypes |= aiPrimitiveType_POINT;
+                break;
+            case 2:
+                out_mesh->mPrimitiveTypes |= aiPrimitiveType_LINE;
+                break;
+            case 3:
+                out_mesh->mPrimitiveTypes |= aiPrimitiveType_TRIANGLE;
+                break;
+            default:
+                out_mesh->mPrimitiveTypes |= aiPrimitiveType_POLYGON;
+                break;
+            }
+            for (unsigned int i = 0; i < pcount; ++i, ++cursor, ++in_cursor) {
+                f.mIndices[i] = cursor;
+
+                if(reverseMapping.size()) {
+                    reverseMapping[cursor] = in_cursor;
+                }
+
+                out_mesh->mVertices[cursor] = vertices[in_cursor];
+
+                if(out_mesh->mNormals) {
+                    out_mesh->mNormals[cursor] = normals[in_cursor];
+                }
+
+                if(out_mesh->mTangents) {
+                    out_mesh->mTangents[cursor] = tangents[in_cursor];
+                    out_mesh->mBitangents[cursor] = (*binormals)[in_cursor];
+                }
+
+                for (unsigned int i = 0; i < num_uvs; ++i) {
+                    const std::vector<aiVector2D>& uvs = mesh.GetTextureCoords(i);
+                    out_mesh->mTextureCoords[i][cursor] = aiVector3D(uvs[in_cursor].x,uvs[in_cursor].y, 0.0f);
+                }
+
+                for (unsigned int i = 0; i < num_vcs; ++i) {
+                    const std::vector<aiColor4D>& cols = mesh.GetVertexColors(i);
+                    out_mesh->mColors[i][cursor] = cols[in_cursor];
+                }
+            }
+        }
+    
+        ConvertMaterialForMesh(out_mesh,model,mesh,index);
+
+        if(process_weights) {
+            ConvertWeights(out_mesh, model, mesh, node_global_transform, index, &reverseMapping);
+        }
+
+        return static_cast<unsigned int>(meshes.size() - 1);
+    }
+
+    static const unsigned int NO_MATERIAL_SEPARATION = // std::numeric_limits<unsigned int>::max()
+        static_cast<unsigned int>(-1);
+
+    // ------------------------------------------------------------------------------------------------
+    void ConvertMaterialForMesh(aiMesh* out, const Model& model, const MeshGeometry& geo, 
+        MatIndexArray::value_type materialIndex)
+    {
+        // locate source materials for this mesh
+        const std::vector<const Material*>& mats = model.GetMaterials();
+        if (static_cast<unsigned int>(materialIndex) >= mats.size() || materialIndex < 0) {
+            FBXImporter::LogError("material index out of bounds, setting default material");
+            out->mMaterialIndex = GetDefaultMaterial();
+            return;
+        }
+
+        const Material* const mat = mats[materialIndex];
+        MaterialMap::const_iterator it = materials_converted.find(mat);
+        if (it != materials_converted.end()) {
+            out->mMaterialIndex = (*it).second;
+            return;
+        }
+
+        out->mMaterialIndex = ConvertMaterial(*mat, &geo);  
+        materials_converted[mat] = out->mMaterialIndex;
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    unsigned int GetDefaultMaterial()
+    {
+        if (defaultMaterialIndex) {
+            return defaultMaterialIndex - 1; 
+        }
+
+        aiMaterial* out_mat = new aiMaterial();
+        materials.push_back(out_mat);
+
+        const aiColor3D diffuse = aiColor3D(0.8f,0.8f,0.8f);
+        out_mat->AddProperty(&diffuse,1,AI_MATKEY_COLOR_DIFFUSE);
+
+        aiString s;
+        s.Set(AI_DEFAULT_MATERIAL_NAME);
+
+        out_mat->AddProperty(&s,AI_MATKEY_NAME);
+
+        defaultMaterialIndex = static_cast<unsigned int>(materials.size());
+        return defaultMaterialIndex - 1;
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    // Material -> aiMaterial
+    unsigned int ConvertMaterial(const Material& material, const MeshGeometry* const mesh)
+    {
+        const PropertyTable& props = material.Props();
+
+        // generate empty output material
+        aiMaterial* out_mat = new aiMaterial();
+        materials_converted[&material] = static_cast<unsigned int>(materials.size());
+
+        materials.push_back(out_mat);
+
+        aiString str;
+
+        // stip Material:: prefix
+        std::string name = material.Name();
+        if(name.substr(0,10) == "Material::") {
+            name = name.substr(10);
+        }
+
+        // set material name if not empty - this could happen
+        // and there should be no key for it in this case.
+        if(name.length()) {
+            str.Set(name);
+            out_mat->AddProperty(&str,AI_MATKEY_NAME);
+        }
+
+        // shading stuff and colors
+        SetShadingPropertiesCommon(out_mat,props);
+    
+        // texture assignments
+        SetTextureProperties(out_mat,material.Textures(), mesh);
+        SetTextureProperties(out_mat,material.LayeredTextures(), mesh);
+
+        return static_cast<unsigned int>(materials.size() - 1);
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    void TrySetTextureProperties(aiMaterial* out_mat, const TextureMap& textures, 
+        const std::string& propName, 
+        aiTextureType target, const MeshGeometry* const mesh)
+    {
+        TextureMap::const_iterator it = textures.find(propName);
+        if(it == textures.end()) {
+            return;
+        }
+
+        const Texture* const tex = (*it).second;
+        if(tex !=0 )
+        {
+            aiString path;
+            path.Set(tex->RelativeFilename());
+
+            out_mat->AddProperty(&path,_AI_MATKEY_TEXTURE_BASE,target,0);
+
+            aiUVTransform uvTrafo;
+            // XXX handle all kinds of UV transformations
+            uvTrafo.mScaling = tex->UVScaling();
+            uvTrafo.mTranslation = tex->UVTranslation();
+            out_mat->AddProperty(&uvTrafo,1,_AI_MATKEY_UVTRANSFORM_BASE,target,0);
+
+            const PropertyTable& props = tex->Props();
+
+            int uvIndex = 0;
+
+            bool ok;
+            const std::string& uvSet = PropertyGet<std::string>(props,"UVSet",ok);
+            if(ok) {
+                // "default" is the name which usually appears in the FbxFileTexture template
+                if(uvSet != "default" && uvSet.length()) {
+                    // this is a bit awkward - we need to find a mesh that uses this
+                    // material and scan its UV channels for the given UV name because
+                    // assimp references UV channels by index, not by name.
+
+                    // XXX: the case that UV channels may appear in different orders
+                    // in meshes is unhandled. A possible solution would be to sort
+                    // the UV channels alphabetically, but this would have the side
+                    // effect that the primary (first) UV channel would sometimes
+                    // be moved, causing trouble when users read only the first
+                    // UV channel and ignore UV channel assignments altogether.
+
+                    const unsigned int matIndex = static_cast<unsigned int>(std::distance(materials.begin(), 
+                        std::find(materials.begin(),materials.end(),out_mat)
+                    ));
+
+                  uvIndex = -1;
+                  if (!mesh) {
+                      BOOST_FOREACH(const MeshMap::value_type& v,meshes_converted) {
+                          const MeshGeometry* const mesh = dynamic_cast<const MeshGeometry*> (v.first);
+                          if(!mesh) {
+                              continue;
+                          }
+
+                          const MatIndexArray& mats = mesh->GetMaterialIndices();
+                          if(std::find(mats.begin(),mats.end(),matIndex) == mats.end()) {
+                              continue;
+                          }
+
+                          int index = -1;
+                          for (unsigned int i = 0; i < AI_MAX_NUMBER_OF_TEXTURECOORDS; ++i) {
+                              if(mesh->GetTextureCoords(i).empty()) {
+                                  break;
+                              }
+                              const std::string& name = mesh->GetTextureCoordChannelName(i);
+                              if(name == uvSet) {
+                                  index = static_cast<int>(i);
+                                  break;
+                              }
+                          }
+                          if(index == -1) {
+                              FBXImporter::LogWarn("did not find UV channel named " + uvSet + " in a mesh using this material");
+                              continue;
+                          }
+
+                          if(uvIndex == -1) {
+                              uvIndex = index;
+                          }
+                          else {
+                              FBXImporter::LogWarn("the UV channel named " + uvSet + 
+                                  " appears at different positions in meshes, results will be wrong");
+                          }
+                      }
+                  } else {
+                        int index = -1;
+                        for (unsigned int i = 0; i < AI_MAX_NUMBER_OF_TEXTURECOORDS; ++i) {
+                            if(mesh->GetTextureCoords(i).empty()) {
+                                break;
+                            }
+                            const std::string& name = mesh->GetTextureCoordChannelName(i);
+                            if(name == uvSet) {
+                                index = static_cast<int>(i);
+                                break;
+                            }
+                        }
+                        if(index == -1) {
+                            FBXImporter::LogWarn("did not find UV channel named " + uvSet + " in a mesh using this material");
+                        }
+
+                        if(uvIndex == -1) {
+                            uvIndex = index;
+                        }
+                  }
+
+                    if(uvIndex == -1) {
+                        FBXImporter::LogWarn("failed to resolve UV channel " + uvSet + ", using first UV channel");
+                        uvIndex = 0;
+                    }
+                }
+            }
+
+            out_mat->AddProperty(&uvIndex,1,_AI_MATKEY_UVWSRC_BASE,target,0);
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    void TrySetTextureProperties(aiMaterial* out_mat, const LayeredTextureMap& layeredTextures, 
+        const std::string& propName, 
+        aiTextureType target, const MeshGeometry* const mesh)
+    {
+        LayeredTextureMap::const_iterator it = layeredTextures.find(propName);
+        if(it == layeredTextures.end()) {
+            return;
+        }
+
+        const Texture* const tex = (*it).second->getTexture();
+
+        aiString path;
+        path.Set(tex->RelativeFilename());
+
+        out_mat->AddProperty(&path,_AI_MATKEY_TEXTURE_BASE,target,0);
+
+        aiUVTransform uvTrafo;
+        // XXX handle all kinds of UV transformations
+        uvTrafo.mScaling = tex->UVScaling();
+        uvTrafo.mTranslation = tex->UVTranslation();
+        out_mat->AddProperty(&uvTrafo,1,_AI_MATKEY_UVTRANSFORM_BASE,target,0);
+
+        const PropertyTable& props = tex->Props();
+
+        int uvIndex = 0;
+
+        bool ok;
+        const std::string& uvSet = PropertyGet<std::string>(props,"UVSet",ok);
+        if(ok) {
+            // "default" is the name which usually appears in the FbxFileTexture template
+            if(uvSet != "default" && uvSet.length()) {
+                // this is a bit awkward - we need to find a mesh that uses this
+                // material and scan its UV channels for the given UV name because
+                // assimp references UV channels by index, not by name.
+
+                // XXX: the case that UV channels may appear in different orders
+                // in meshes is unhandled. A possible solution would be to sort
+                // the UV channels alphabetically, but this would have the side
+                // effect that the primary (first) UV channel would sometimes
+                // be moved, causing trouble when users read only the first
+                // UV channel and ignore UV channel assignments altogether.
+
+                const unsigned int matIndex = static_cast<unsigned int>(std::distance(materials.begin(), 
+                    std::find(materials.begin(),materials.end(),out_mat)
+                    ));
+
+              uvIndex = -1;
+        if (!mesh)
+        {                   
+                    BOOST_FOREACH(const MeshMap::value_type& v,meshes_converted) {
+                        const MeshGeometry* const mesh = dynamic_cast<const MeshGeometry*> (v.first);
+                        if(!mesh) {
+                            continue;
+                        }
+
+                        const MatIndexArray& mats = mesh->GetMaterialIndices();
+                        if(std::find(mats.begin(),mats.end(),matIndex) == mats.end()) {
+                            continue;
+                        }
+
+                        int index = -1;
+                        for (unsigned int i = 0; i < AI_MAX_NUMBER_OF_TEXTURECOORDS; ++i) {
+                            if(mesh->GetTextureCoords(i).empty()) {
+                                break;
+                            }
+                            const std::string& name = mesh->GetTextureCoordChannelName(i);
+                            if(name == uvSet) {
+                                index = static_cast<int>(i);
+                                break;
+                            }
+                        }
+                        if(index == -1) {
+                            FBXImporter::LogWarn("did not find UV channel named " + uvSet + " in a mesh using this material");
+                            continue;
+                        }
+
+                        if(uvIndex == -1) {
+                            uvIndex = index;
+                        }
+                        else {
+                            FBXImporter::LogWarn("the UV channel named " + uvSet + 
+                                " appears at different positions in meshes, results will be wrong");
+                        }
+                    }
+        }
+        else
+        {
+                    int index = -1;
+                    for (unsigned int i = 0; i < AI_MAX_NUMBER_OF_TEXTURECOORDS; ++i) {
+                        if(mesh->GetTextureCoords(i).empty()) {
+                            break;
+                        }
+                        const std::string& name = mesh->GetTextureCoordChannelName(i);
+                        if(name == uvSet) {
+                            index = static_cast<int>(i);
+                            break;
+                        }
+                    }
+                    if(index == -1) {
+                        FBXImporter::LogWarn("did not find UV channel named " + uvSet + " in a mesh using this material");
+                    }
+
+                    if(uvIndex == -1) {
+                        uvIndex = index;
+                    }
+        }
+
+                if(uvIndex == -1) {
+                    FBXImporter::LogWarn("failed to resolve UV channel " + uvSet + ", using first UV channel");
+                    uvIndex = 0;
+                }
+            }
+        }
+
+        out_mat->AddProperty(&uvIndex,1,_AI_MATKEY_UVWSRC_BASE,target,0);
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    void SetTextureProperties(aiMaterial* out_mat, const TextureMap& textures, const MeshGeometry* const mesh)
+    {
+        TrySetTextureProperties(out_mat, textures, "DiffuseColor", aiTextureType_DIFFUSE, mesh);
+        TrySetTextureProperties(out_mat, textures, "AmbientColor", aiTextureType_AMBIENT, mesh);
+        TrySetTextureProperties(out_mat, textures, "EmissiveColor", aiTextureType_EMISSIVE, mesh);
+        TrySetTextureProperties(out_mat, textures, "SpecularColor", aiTextureType_SPECULAR, mesh);
+        TrySetTextureProperties(out_mat, textures, "TransparentColor", aiTextureType_OPACITY, mesh);
+        TrySetTextureProperties(out_mat, textures, "ReflectionColor", aiTextureType_REFLECTION, mesh);
+        TrySetTextureProperties(out_mat, textures, "DisplacementColor", aiTextureType_DISPLACEMENT, mesh);
+        TrySetTextureProperties(out_mat, textures, "NormalMap", aiTextureType_NORMALS, mesh);
+        TrySetTextureProperties(out_mat, textures, "Bump", aiTextureType_HEIGHT, mesh);
+        TrySetTextureProperties(out_mat, textures, "ShininessExponent", aiTextureType_SHININESS, mesh);
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    void SetTextureProperties(aiMaterial* out_mat, const LayeredTextureMap& layeredTextures, const MeshGeometry* const mesh)
+    {
+        TrySetTextureProperties(out_mat, layeredTextures, "DiffuseColor", aiTextureType_DIFFUSE, mesh);
+        TrySetTextureProperties(out_mat, layeredTextures, "AmbientColor", aiTextureType_AMBIENT, mesh);
+        TrySetTextureProperties(out_mat, layeredTextures, "EmissiveColor", aiTextureType_EMISSIVE, mesh);
+        TrySetTextureProperties(out_mat, layeredTextures, "SpecularColor", aiTextureType_SPECULAR, mesh);
+        TrySetTextureProperties(out_mat, layeredTextures, "TransparentColor", aiTextureType_OPACITY, mesh);
+        TrySetTextureProperties(out_mat, layeredTextures, "ReflectionColor", aiTextureType_REFLECTION, mesh);
+        TrySetTextureProperties(out_mat, layeredTextures, "DisplacementColor", aiTextureType_DISPLACEMENT, mesh);
+        TrySetTextureProperties(out_mat, layeredTextures, "NormalMap", aiTextureType_NORMALS, mesh);
+        TrySetTextureProperties(out_mat, layeredTextures, "Bump", aiTextureType_HEIGHT, mesh);
+        TrySetTextureProperties(out_mat, layeredTextures, "ShininessExponent", aiTextureType_SHININESS, mesh);
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    aiColor3D GetColorPropertyFromMaterial(const PropertyTable& props, const std::string& baseName, 
+        bool& result)
+    {
+        result = true;
+
+        bool ok;
+        const aiVector3D& Diffuse = PropertyGet<aiVector3D>(props,baseName,ok);
+        if(ok) {
+            return aiColor3D(Diffuse.x,Diffuse.y,Diffuse.z);
+        }
+        else {
+            aiVector3D DiffuseColor = PropertyGet<aiVector3D>(props,baseName + "Color",ok);
+            if(ok) {
+                float DiffuseFactor = PropertyGet<float>(props,baseName + "Factor",ok);
+                if(ok) {
+                    DiffuseColor *= DiffuseFactor;
+                }
+
+                return aiColor3D(DiffuseColor.x,DiffuseColor.y,DiffuseColor.z);
+            }
+        }
+        result = false;
+        return aiColor3D(0.0f,0.0f,0.0f);
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    void SetShadingPropertiesCommon(aiMaterial* out_mat, const PropertyTable& props)
+    {
+        // set shading properties. There are various, redundant ways in which FBX materials
+        // specify their shading settings (depending on shading models, prop
+        // template etc.). No idea which one is right in a particular context. 
+        // Just try to make sense of it - there's no spec to verify this against, 
+        // so why should we.
+        bool ok;
+        const aiColor3D& Diffuse = GetColorPropertyFromMaterial(props,"Diffuse",ok);
+        if(ok) {
+            out_mat->AddProperty(&Diffuse,1,AI_MATKEY_COLOR_DIFFUSE);
+        }
+
+        const aiColor3D& Emissive = GetColorPropertyFromMaterial(props,"Emissive",ok);
+        if(ok) {
+            out_mat->AddProperty(&Emissive,1,AI_MATKEY_COLOR_EMISSIVE);
+        }
+
+        const aiColor3D& Ambient = GetColorPropertyFromMaterial(props,"Ambient",ok);
+        if(ok) {
+            out_mat->AddProperty(&Ambient,1,AI_MATKEY_COLOR_AMBIENT);
+        }
+
+        const aiColor3D& Specular = GetColorPropertyFromMaterial(props,"Specular",ok);
+        if(ok) {
+            out_mat->AddProperty(&Specular,1,AI_MATKEY_COLOR_SPECULAR);
+        }
+
+        const float Opacity = PropertyGet<float>(props,"Opacity",ok);
+        if(ok) {
+            out_mat->AddProperty(&Opacity,1,AI_MATKEY_OPACITY);
+        }
+
+        const float Reflectivity = PropertyGet<float>(props,"Reflectivity",ok);
+        if(ok) {
+            out_mat->AddProperty(&Reflectivity,1,AI_MATKEY_REFLECTIVITY);
+        }
+
+        const float Shininess = PropertyGet<float>(props,"Shininess",ok);
+        if(ok) {
+            out_mat->AddProperty(&Shininess,1,AI_MATKEY_SHININESS_STRENGTH);
+        }
+
+        const float ShininessExponent = PropertyGet<float>(props,"ShininessExponent",ok);
+        if(ok) {
+            out_mat->AddProperty(&ShininessExponent,1,AI_MATKEY_SHININESS);
+        }
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    // convert animation data to aiAnimation et al
+    void ConvertAnimations() 
+    {
+        // TODO
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    // rename a node already partially converted. fixed_name is a string previously returned by 
+    // FixNodeName, new_name specifies the string FixNodeName should return on all further invocations 
+    // which would previously have returned the old value.
+    //
+    // this also updates names in node animations, cameras and light sources and is thus slow.
+    //
+    // NOTE: the caller is responsible for ensuring that the new name is unique and does
+    // not collide with any other identifiers. The best way to ensure this is to only
+    // append to the old name, which is guaranteed to match these requirements.
+    void RenameNode(const std::string& fixed_name, const std::string& new_name)
+    {
+        ai_assert(node_names.find(fixed_name) != node_names.end());
+        ai_assert(node_names.find(new_name) == node_names.end());
+
+        renamed_nodes[fixed_name] = new_name;
+
+        const aiString fn(fixed_name);
+
+        BOOST_FOREACH(aiCamera* cam, cameras) {
+            if (cam->mName == fn) {
+                cam->mName.Set(new_name);
+                break;
+            }
+        }
+
+        BOOST_FOREACH(aiLight* light, lights) {
+            if (light->mName == fn) {
+                light->mName.Set(new_name);
+                break;
+            }
+        }
+
+        BOOST_FOREACH(aiAnimation* anim, animations) {
+            for (unsigned int i = 0; i < anim->mNumChannels; ++i) {
+                aiNodeAnim* const na = anim->mChannels[i];
+                if (na->mNodeName == fn) {
+                    na->mNodeName.Set(new_name);
+                    break;
+                }
+            }
+        }
+    }
+
+
+    // ------------------------------------------------------------------------------------------------
+    // takes a fbx node name and returns the identifier to be used in the assimp output scene.
+    // the function is guaranteed to provide consistent results over multiple invocations
+    // UNLESS RenameNode() is called for a particular node name.
+    std::string FixNodeName(const std::string& name)
+    {
+        // strip Model:: prefix, avoiding ambiguities (i.e. don't strip if 
+        // this causes ambiguities, well possible between empty identifiers,
+        // such as "Model::" and ""). Make sure the behaviour is consistent
+        // across multiple calls to FixNodeName().
+        if(name.substr(0,7) == "Model::") {
+            std::string temp = name.substr(7);
+
+            const NodeNameMap::const_iterator it = node_names.find(temp);
+            if (it != node_names.end()) {
+                if (!(*it).second) {
+                    return FixNodeName(name + "_");
+                }
+            }
+            node_names[temp] = true;
+
+            const NameNameMap::const_iterator rit = renamed_nodes.find(temp);
+            return rit == renamed_nodes.end() ? temp : (*rit).second;
+        }
+
+        const NodeNameMap::const_iterator it = node_names.find(name);
+        if (it != node_names.end()) {
+            if ((*it).second) {
+                return FixNodeName(name + "_");
+            }
+        }
+        node_names[name] = false;
+
+        const NameNameMap::const_iterator rit = renamed_nodes.find(name);
+        return rit == renamed_nodes.end() ? name : (*rit).second;
+    }
+
+    */
+
+    // ------------------------------------------------------------------------------------------------
+    // copy generated meshes, animations, lights, cameras and textures to the output scene
+    void TransferDataToScene()
+    {
+        ai_assert(!out->mMeshes && !out->mNumMeshes);
+
+        // note: the trailing () ensures initialization with NULL - not
+        // many C++ users seem to know this, so pointing it out to avoid
+        // confusion why this code works.
+
+        if(meshes.size()) {
+            out->mMeshes = new aiMesh*[meshes.size()]();
+            out->mNumMeshes = static_cast<unsigned int>(meshes.size());
+
+            std::swap_ranges(meshes.begin(),meshes.end(),out->mMeshes);
+        }
+
+        if(materials.size()) {
+            out->mMaterials = new aiMaterial*[materials.size()]();
+            out->mNumMaterials = static_cast<unsigned int>(materials.size());
+
+            std::swap_ranges(materials.begin(),materials.end(),out->mMaterials);
+        }
+
+        if(animations.size()) {
+            out->mAnimations = new aiAnimation*[animations.size()]();
+            out->mNumAnimations = static_cast<unsigned int>(animations.size());
+
+            std::swap_ranges(animations.begin(),animations.end(),out->mAnimations);
+        }
+
+        if(lights.size()) {
+            out->mLights = new aiLight*[lights.size()]();
+            out->mNumLights = static_cast<unsigned int>(lights.size());
+
+            std::swap_ranges(lights.begin(),lights.end(),out->mLights);
+        }
+
+        if(cameras.size()) {
+            out->mCameras = new aiCamera*[cameras.size()]();
+            out->mNumCameras = static_cast<unsigned int>(cameras.size());
+
+            std::swap_ranges(cameras.begin(),cameras.end(),out->mCameras);
+        }
+    }
+
+
+private:
+
+    // 0: not assigned yet, others: index is value - 1
+    unsigned int defaultMaterialIndex;
+
+    std::vector<aiMesh*> meshes;
+    std::vector<aiMaterial*> materials;
+    std::vector<aiAnimation*> animations;
+    std::vector<aiLight*> lights;
+    std::vector<aiCamera*> cameras;
+
+    typedef std::map<const MaterialRefStructure*, unsigned int> MaterialMap;
+    MaterialMap materials_converted;
+
+    typedef std::map<const GeometryObjectStructure*, std::vector<unsigned int> > MeshMap;
+    MeshMap meshes_converted;
+
+    // name -> has had its prefix_stripped?
+    typedef std::map<std::string, bool> NodeNameMap;
+    NodeNameMap node_names;
+
+    typedef std::map<std::string, std::string> NameNameMap;
+    NameNameMap renamed_nodes;
+
+    double anim_fps;
+
+    aiScene* const out;
+    const OpenGexDataDescription& desc;
+};
+
+void ConvertToAssimpScene( aiScene *pScene, const OpenGexDataDescription& desc ) {
+    Converter conv(pScene, desc);
 }
 
-//------------------------------------------------------------------------------------------------
-OpenGEXImporter::RefInfo::~RefInfo() {
-    // empty
-}
+} // namespace
 
 //------------------------------------------------------------------------------------------------
-OpenGEXImporter::OpenGEXImporter() 
-: m_meshCache()
-, m_mesh2refMap()
-, m_ctx( NULL )
-, m_currentNode( NULL )
-, m_nodeStack()
-, m_unresolvedRefStack() {
-    // empty
+OpenGEXImporter::OpenGEXImporter() {
+
 }
 
 //------------------------------------------------------------------------------------------------
 OpenGEXImporter::~OpenGEXImporter() {
-    m_ctx = NULL;
+
 }
 
 //------------------------------------------------------------------------------------------------
 bool OpenGEXImporter::CanRead( const std::string &file, IOSystem *pIOHandler, bool checkSig ) const {
-    bool canRead( false );
-    if( !checkSig ) {
-        canRead = SimpleExtensionCheck( file, "ogex" );
-    } else {
-        static const char *token[] = { "Metric", "GeometryNode", "VertexArray (attrib", "IndexArray" };
-        canRead = BaseImporter::SearchFileHeaderForToken( pIOHandler, file, token, 4 );
-    }
-
-    return canRead;
+    return true;
 }
 
 //------------------------------------------------------------------------------------------------
-void OpenGEXImporter::InternReadFile( const std::string &filename, aiScene *pScene, IOSystem *pIOHandler ) {
-    // open source file
-    IOStream *file = pIOHandler->Open( filename, "rb" );
-    if( !file ) {
-        throw DeadlyImportError( "Failed to open file " + filename );
+void OpenGEXImporter::InternReadFile( const std::string &file, aiScene *pScene, IOSystem *pIOHandler ) {
+    boost::scoped_ptr<IOStream> stream(pIOHandler->Open(file, "rb"));
+    if (!stream) {
+        ThrowException("Could not open file for reading");
     }
 
-    std::vector<char> buffer;
-    TextFileToBuffer( file, buffer );
-
-    OpenDDLParser myParser;
-    myParser.setBuffer( &buffer[ 0 ], buffer.size() );
-    bool success( myParser.parse() );
-    if( success ) {
-        m_ctx = myParser.getContext();
-        pScene->mRootNode = new aiNode;
-        pScene->mRootNode->mName.Set( filename );
-        handleNodes( m_ctx->m_root, pScene );
+    if (!stream->FileSize()) {
+        ThrowException("File is empty");
     }
 
-    resolveReferences();
+    const size_t sizeBytes = stream->FileSize();
+    std::vector<char> contents(sizeBytes + 1);
+    stream->Read(&*contents.begin(), sizeBytes, 1);
+    contents[sizeBytes] = 0;
+
+    OpenGexDataDescription openGexDataDescription;
+    DataResult result = openGexDataDescription.ProcessText(&*contents.begin());
+    if (result == kDataOkay) {
+        ConvertToAssimpScene(pScene, openGexDataDescription);
+    } else {
+        ThrowException("Failed to load OpenGEX file");
+    }
 }
 
 //------------------------------------------------------------------------------------------------
@@ -235,307 +1742,7 @@ const aiImporterDesc *OpenGEXImporter::GetInfo() const {
 
 //------------------------------------------------------------------------------------------------
 void OpenGEXImporter::SetupProperties( const Importer *pImp ) {
-    if( NULL == pImp ) {
-        return;
-    }
-}
 
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleNodes( DDLNode *node, aiScene *pScene ) {
-    if( NULL == node ) {
-        return;
-    }
-
-    DDLNode::DllNodeList childs = node->getChildNodeList();
-    for( DDLNode::DllNodeList::iterator it = childs.begin(); it != childs.end(); it++ ) {
-        Grammar::TokenType tokenType( Grammar::matchTokenType( ( *it )->getType().c_str() ) );
-        switch( tokenType ) {
-            case Grammar::MetricToken:
-                handleMetricNode( *it, pScene );
-                break;
-
-            case Grammar::NameToken:
-                handleNameNode( *it, pScene );
-                break;
-
-            case Grammar::ObjectRefToken:
-                handleObjectRefNode( *it, pScene );
-                break;
-
-            case Grammar::MaterialRefToken:
-                handleMaterialRefNode( *it, pScene );
-                break;
-
-            case Grammar::MetricKeyToken:
-                break;
-
-            case Grammar::GeometryNodeToken:
-                handleGeometryNode( *it, pScene );
-                break;
-
-            case Grammar::GeometryObjectToken:
-                handleGeometryObject( *it, pScene );
-                break;
-
-            case Grammar::TransformToken:
-                handleTransformNode( *it, pScene );
-                break;
-
-            case Grammar::MeshToken:
-                handleMeshNode( *it, pScene );
-                break;
-
-            case Grammar::VertexArrayToken:
-                handleVertexArrayNode( *it, pScene );
-                break;
-
-            case Grammar::IndexArrayToken:
-                handleIndexArrayNode( *it, pScene );
-                break;
-
-            case Grammar::MaterialToken:
-                handleMaterialNode( *it, pScene );
-                break;
-
-            case Grammar::ColorToken:
-                handleColorNode( *it, pScene );
-                break;
-
-            case Grammar::TextureToken:
-                handleTextureNode( *it, pScene );
-                break;
-            
-            default:
-                break;
-        }
-    }
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleMetricNode( DDLNode *node, aiScene *pScene ) {
-    if( NULL == node || NULL == m_ctx ) {
-        return;
-    }
-
-    if( m_ctx->m_root != node->getParent() ) {
-        return;
-    }
-
-    Property *prop( node->getProperties() );
-    while( NULL != prop ) {
-        if( NULL != prop->m_id ) {
-            if( Value::ddl_string == prop->m_primData->m_type ) {
-                std::string valName( (char*) prop->m_primData->m_data );
-                int type( Grammar::isValidMetricType( valName.c_str() ) );
-                if( Grammar::NoneType != type ) {
-                    Value *val( node->getValue() );
-                    if( NULL != val ) {
-                        if( Value::ddl_float == val->m_type ) {
-                            m_metrics[ type ].m_floatValue = val->getFloat();
-                        } else if( Value::ddl_int32 == val->m_type ) {
-                            m_metrics[ type ].m_intValue = val->getInt32();
-                        } else if( Value::ddl_string == val->m_type ) {
-                            m_metrics[type].m_stringValue = std::string( val->getString() );
-                        } else {
-                            throw DeadlyImportError( "OpenGEX: invalid data type for Metric node." );
-                        }
-                    }
-                }
-            }
-        }
-        prop = prop->m_next;
-    }
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleNameNode( DDLNode *node, aiScene *pScene ) {
-    if( NULL == m_currentNode ) {
-        throw DeadlyImportError( "No parent node for name." );
-        return;
-    }
-
-    Value *val( node->getValue() );
-    if( NULL != val ) {
-        if( Value::ddl_string != val->m_type ) {
-            throw DeadlyImportError( "OpenGEX: invalid data type for value in node name." );
-        }
-
-        std::string name( val->getString() );
-        m_currentNode->mName.Set( name.c_str() );
-    }
-}
-
-//------------------------------------------------------------------------------------------------
-static void getRefNames( DDLNode *node, std::vector<std::string> &names ) {
-    ai_assert( NULL != node );
-
-    Reference *ref = node->getReferences();
-    if( NULL != ref ) {
-        for( size_t i = 0; i < ref->m_numRefs; i++ )  {
-            Name *currentName( ref->m_referencedName[ i ] );
-            if( NULL != currentName && NULL != currentName->m_id ) {
-                const std::string name( currentName->m_id->m_buffer );
-                if( !name.empty() ) {
-                    names.push_back( name );
-                }
-            }
-        }
-    }
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleObjectRefNode( DDLNode *node, aiScene *pScene ) {
-    if( NULL == m_currentNode ) {
-        throw DeadlyImportError( "No parent node for name." );
-        return;
-    }
-
-    std::vector<std::string> objRefNames;
-    getRefNames( node, objRefNames );
-    m_currentNode->mNumMeshes = objRefNames.size();
-    m_currentNode->mMeshes = new unsigned int[ objRefNames.size() ];
-    if( !objRefNames.empty() ) {
-        m_unresolvedRefStack.push_back( new RefInfo( m_currentNode, RefInfo::MeshRef, objRefNames ) );
-    }
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleMaterialRefNode( ODDLParser::DDLNode *node, aiScene *pScene ) {
-    if( NULL == m_currentNode ) {
-        throw DeadlyImportError( "No parent node for name." );
-        return;
-    }
-
-    std::vector<std::string> matRefNames;
-    getRefNames( node, matRefNames );
-    if( !matRefNames.empty() ) {
-        m_unresolvedRefStack.push_back( new RefInfo( m_currentNode, RefInfo::MaterialRef, matRefNames ) );
-    }
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleGeometryNode( DDLNode *node, aiScene *pScene ) {
-    aiNode *newNode = new aiNode;
-    pushNode( newNode, pScene );
-    m_currentNode = newNode;
-    handleNodes( node, pScene );
-    
-    popNode();
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleGeometryObject( DDLNode *node, aiScene *pScene ) {
-    aiMesh *currentMesh( new aiMesh );
-    const size_t idx( m_meshCache.size() );
-    m_meshCache.push_back( currentMesh );
-
-    // store name to reference relation
-    m_mesh2refMap[ node->getName() ] = idx;
-
-    // todo: child nodes?
-
-    handleNodes( node, pScene );
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleTransformNode( ODDLParser::DDLNode *node, aiScene *pScene ) {
-
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleMeshNode( ODDLParser::DDLNode *node, aiScene *pScene ) {
-
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleVertexArrayNode( ODDLParser::DDLNode *node, aiScene *pScene ) {
-
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleIndexArrayNode( ODDLParser::DDLNode *node, aiScene *pScene ) {
-
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleMaterialNode( ODDLParser::DDLNode *node, aiScene *pScene ) {
-
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::resolveReferences() {
-    if( m_unresolvedRefStack.empty() ) {
-        return;
-    }
-
-    RefInfo *currentRefInfo( NULL );
-    for( std::vector<RefInfo*>::iterator it = m_unresolvedRefStack.begin(); it != m_unresolvedRefStack.end(); ++it ) {
-        currentRefInfo = *it;
-        if( NULL != currentRefInfo ) {
-            aiNode *node( currentRefInfo->m_node );
-            if( RefInfo::MeshRef == currentRefInfo->m_type ) {
-                for( size_t i = 0; i < currentRefInfo->m_Names.size(); i++ ) {
-                    const std::string &name(currentRefInfo->m_Names[ i ] );
-                    unsigned int meshIdx = m_mesh2refMap[ name ];
-                    node->mMeshes[ i ] = meshIdx;
-                }
-            } else if( RefInfo::MaterialRef == currentRefInfo->m_type ) {
-                // ToDo
-            }
-        }
-    }
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleColorNode( ODDLParser::DDLNode *node, aiScene *pScene ) {
-
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::handleTextureNode( ODDLParser::DDLNode *node, aiScene *pScene ) {
-
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::pushNode( aiNode *node, aiScene *pScene ) {
-    ai_assert( NULL != pScene );
-
-    if( NULL != node ) {
-        if( m_nodeStack.empty() ) {
-            node->mParent = pScene->mRootNode;
-        } else {
-            aiNode *parent( m_nodeStack.back() );
-            ai_assert( NULL != parent );
-            node->mParent = parent;
-        }
-        m_nodeStack.push_back( node );
-    }
-}
-
-//------------------------------------------------------------------------------------------------
-aiNode *OpenGEXImporter::popNode() {
-    if( m_nodeStack.empty() ) {
-        return NULL;
-    }
-    
-    aiNode *node( top() );
-    m_nodeStack.pop_back();
-    
-    return node;
-}
-
-//------------------------------------------------------------------------------------------------
-aiNode *OpenGEXImporter::top() const {
-    if( m_nodeStack.empty() ) {
-        return NULL;
-    }
-
-    return m_nodeStack.back();
-}
-
-//------------------------------------------------------------------------------------------------
-void OpenGEXImporter::clearNodeStack() {
-    m_nodeStack.clear();
 }
 
 //------------------------------------------------------------------------------------------------
