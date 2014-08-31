@@ -40,8 +40,6 @@
 	POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef ASSIMP_BUILD_NO_OPEMGEX_IMPORTER
-
 #include "OpenGEX.h"
 
 using namespace OGEX;
@@ -3180,5 +3178,3 @@ DataResult OpenGexDataDescription::ProcessData(void)
 
 	return (result);
 }
-
-#endif // ASSIMP_BUILD_NO_OPEMGEX_IMPORTER

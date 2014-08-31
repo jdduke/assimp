@@ -359,8 +359,6 @@ SET( Ogre_SRCS
 SOURCE_GROUP( Ogre FILES ${Ogre_SRCS})
 
 SET( OpenGEX_SRCS
-    OpenGEX.cpp
-    OpenGEX.h
     OpenGEXImporter.cpp
     OpenGEXImporter.h
     OpenGEXStructs.h
@@ -642,19 +640,21 @@ SET( unzip_SRCS
 )
 SOURCE_GROUP( unzip FILES ${unzip_SRCS})
 
-SET( OpenDDL_SRCS
-	../contrib/OpenDDL/ODDLArray.h
-	../contrib/OpenDDL/ODDLMap.cpp
-	../contrib/OpenDDL/ODDLMap.h
-	../contrib/OpenDDL/ODDLString.cpp
-	../contrib/OpenDDL/ODDLString.h
-	../contrib/OpenDDL/ODDLTree.cpp
-	../contrib/OpenDDL/ODDLTree.h
-	../contrib/OpenDDL/ODDLTypes.h
-	../contrib/OpenDDL/OpenDDL.h
-	../contrib/OpenDDL/OpenDDL.cpp
+SET( OpenGEX_Contrib_SRCS
+	../contrib/OpenGEX/OpenGEX.cpp
+	../contrib/OpenGEX/OpenGEX.h
+	../contrib/OpenGEX/OpenDDL/ODDLArray.h
+	../contrib/OpenGEX/OpenDDL/ODDLMap.cpp
+	../contrib/OpenGEX/OpenDDL/ODDLMap.h
+	../contrib/OpenGEX/OpenDDL/ODDLString.cpp
+	../contrib/OpenGEX/OpenDDL/ODDLString.h
+	../contrib/OpenGEX/OpenDDL/ODDLTree.cpp
+	../contrib/OpenGEX/OpenDDL/ODDLTree.h
+	../contrib/OpenGEX/OpenDDL/ODDLTypes.h
+	../contrib/OpenGEX/OpenDDL/OpenDDL.h
+	../contrib/OpenGEX/OpenDDL/OpenDDL.cpp
 )
-SOURCE_GROUP( OpenDDL FILES ${OpenDDL_SRCS})
+SOURCE_GROUP( OpenGEX FILES ${OpenGEX_Contrib_SRCS})
 
 # VC2010 fixes
 if(MSVC10)
@@ -735,7 +735,7 @@ SET( assimp_src
 	${unzip_compile_SRCS}
 	${Poly2Tri_SRCS}
 	${Clipper_SRCS}
-	${OpenDDL_SRCS}
+	${OpenGEX_Contrib_SRCS}
 
 	# Necessary to show the headers in the project when using the VC++ generator:
 	${Boost_SRCS}

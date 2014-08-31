@@ -45,7 +45,7 @@
 #define OpenGEX_h
 
 
-#include "./../contrib/OpenDDL/OpenDDL.h"
+#include "OpenDDL/OpenDDL.h"
 
 
 using namespace ODDL;
