@@ -166,14 +166,26 @@ namespace OGEX
 			String				arrayAttrib;
 			unsigned_int32		morphIndex;
 
+			const DataStructure<FloatDataType>	*dataStructure;
+
 		public:
 
 			VertexArrayStructure();
 			~VertexArrayStructure();
 
+			const String& GetArrayAttrib(void) const
+			{
+				return arrayAttrib;
+			}
+
 			unsigned_int32 GetMorphIndex(void) const
 			{
 				return (morphIndex);
+			}
+
+			const DataStructure<FloatDataType> *GetDataStructure(void) const
+			{
+				return (dataStructure);
 			}
 
 			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
@@ -240,6 +252,11 @@ namespace OGEX
 				return (meshLevel);
 			}
 
+			const String& GetMeshPrimitive(void) const
+			{
+				return (meshPrimitive);
+			}
+
 			SkinStructure *GetSkinStructure(void) const
 			{
 				return (skinStructure);
@@ -257,8 +274,6 @@ namespace OGEX
 
 			const char			*nodeName;
 
-			virtual const ObjectStructure *GetObjectStructure(void) const;
-
 			void CalculateTransforms(const OpenGexDataDescription *dataDescription);
 
 		protected:
@@ -269,6 +284,13 @@ namespace OGEX
 
 			NodeStructure();
 			~NodeStructure();
+
+			const char* GetNodeName(void) const
+			{
+				return (nodeName);
+			}
+
+			virtual const ObjectStructure *GetObjectStructure(void) const;
 
 			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
 			DataResult ProcessData(DataDescription *dataDescription) override;
@@ -301,6 +323,16 @@ namespace OGEX
 
 			GeometryNodeStructure();
 			~GeometryNodeStructure();
+
+			const GeometryObjectStructure* GetGeometryObjectStructure() const
+			{
+				return (geometryObjectStructure);
+			}
+
+			const Array<const MaterialStructure*, 4>& GetMaterialStructureArray() const
+			{
+				return (materialStructureArray);
+			}
 
 			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
 			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
@@ -500,11 +532,14 @@ namespace OGEX
 	};
 
 
+
+
 	class TranslationStructure final : public MatrixStructure
 	{
 		private:
 
 			String		translationKind;
+			const float		*data;
 
 		public:
 
@@ -514,6 +549,11 @@ namespace OGEX
 			const String& GetTranslationKind(void) const
 			{
 				return (translationKind);
+			}
+
+			const float *GetData() const
+			{
+				return data;
 			}
 
 			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
@@ -527,6 +567,7 @@ namespace OGEX
 		private:
 
 			String		rotationKind;
+			const float		*data;
 
 		public:
 
@@ -536,6 +577,11 @@ namespace OGEX
 			const String& GetRotationKind(void) const
 			{
 				return (rotationKind);
+			}
+
+			const float *GetData() const
+			{
+				return data;
 			}
 
 			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
@@ -549,6 +595,7 @@ namespace OGEX
 		private:
 
 			String		scaleKind;
+			const float		*data;
 
 		public:
 
@@ -558,6 +605,11 @@ namespace OGEX
 			const String& GetScaleKind(void) const
 			{
 				return (scaleKind);
+			}
+
+			const float *GetData() const
+			{
+				return data;
 			}
 
 			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;

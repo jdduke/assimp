@@ -167,6 +167,8 @@ DataResult MetricStructure::ProcessData(DataDescription *dataDescription)
 VertexArrayStructure::VertexArrayStructure() : Structure(kStructureVertexArray)
 {
 	morphIndex = 0;
+
+	dataStructure = nullptr;
 }
 
 VertexArrayStructure::~VertexArrayStructure()
@@ -210,7 +212,7 @@ DataResult VertexArrayStructure::ProcessData(DataDescription *dataDescription)
 		return (kDataExtraneousSubstructure);
 	}
 
-	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
+	dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
 
 	int32 arraySize = dataStructure->GetArraySize();
 	int32 elementCount = dataStructure->GetDataElementCount();
@@ -1149,7 +1151,8 @@ DataResult TransformStructure::ProcessData(DataDescription *dataDescription)
 
 TranslationStructure::TranslationStructure() :
 		MatrixStructure(kStructureTranslation),
-		translationKind("xyz")
+		translationKind("xyz"),
+		data(nullptr)
 {
 }
 
@@ -1216,7 +1219,7 @@ DataResult TranslationStructure::ProcessData(DataDescription *dataDescription)
 		return (kDataOpenGexInvalidTranslationKind);
 	}
 
-	const float *data = &dataStructure->GetDataElement(0);
+	data = &dataStructure->GetDataElement(0);
 
 	// Data is 1 or 3 floats depending on kind.
 	// Build application-specific transform here.
@@ -1227,7 +1230,8 @@ DataResult TranslationStructure::ProcessData(DataDescription *dataDescription)
 
 RotationStructure::RotationStructure() :
 		MatrixStructure(kStructureRotation),
-		rotationKind("axis")
+		rotationKind("axis"),
+		data(nullptr)
 {
 }
 
@@ -1294,7 +1298,7 @@ DataResult RotationStructure::ProcessData(DataDescription *dataDescription)
 		return (kDataOpenGexInvalidRotationKind);
 	}
 
-	const float *data = &dataStructure->GetDataElement(0);
+	data = &dataStructure->GetDataElement(0);
 
 	// Data is 1 or 4 floats depending on kind.
 	// Build application-specific transform here.
@@ -1305,7 +1309,8 @@ DataResult RotationStructure::ProcessData(DataDescription *dataDescription)
 
 ScaleStructure::ScaleStructure() :
 		MatrixStructure(kStructureScale),
-		scaleKind("xyz")
+		scaleKind("xyz"),
+		data(nullptr)
 {
 }
 
@@ -1372,7 +1377,7 @@ DataResult ScaleStructure::ProcessData(DataDescription *dataDescription)
 		return (kDataOpenGexInvalidScaleKind);
 	}
 
-	const float *data = &dataStructure->GetDataElement(0);
+	data = &dataStructure->GetDataElement(0);
 
 	// Data is 1 or 3 floats depending on kind.
 	// Build application-specific transform here.

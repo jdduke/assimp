@@ -749,10 +749,19 @@ SET( assimp_src
 	AssimpPCH.cpp
 )
 
-IF (ASSIMP_BUILD_NONFREE_C4D_IMPORTER)
-	SET( assimp_src ${assimp_src} ${C4D_SRCS})
-	INCLUDE_DIRECTORIES(${C4D_INCLUDES})
-ENDIF (ASSIMP_BUILD_NONFREE_C4D_IMPORTER)
+if ( ASSIMP_ENABLE_CXX11 )
+	set( assimp_src
+		${assimp_src}
+		${OpenGEX_Contrib_SRCS}
+	)
+  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -stdlib=libc++")
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set (CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS}")
+  endif()
+else()
+	ADD_DEFINITIONS( -DASSIMP_BUILD_NO_OPENGEX_IMPORTER )
+endif()
 
 #ADD_MSVC_PRECOMPILED_HEADER("AssimpPCH.h" "AssimpPCH.cpp" assimp_src)
 
