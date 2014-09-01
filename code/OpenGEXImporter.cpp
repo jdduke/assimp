@@ -140,14 +140,13 @@ private:
     {
         out->mRootNode = new aiNode();
         out->mRootNode->mName.Set("RootNode");
-
-        // root has ID 0
-        ConvertStructures(desc.GetRootStructure(), *out->mRootNode);
+        ConvertChildren(desc.GetRootStructure(), *out->mRootNode);
     }
 
     // collect and assign child nodes
-    void ConvertStructures(const Structure* structureParent, aiNode& parent, const aiMatrix4x4& parent_transform = aiMatrix4x4())
+    void ConvertChildren(const Structure* structureParent, aiNode& parent, const aiMatrix4x4& parent_transform = aiMatrix4x4())
     {
+        ai_assert(structureParent);
         const Structure* structure = structureParent->GetFirstSubnode();
 
         std::vector<aiNode*> nodes;
@@ -155,7 +154,10 @@ private:
 
         try {
             while (structure) {
+                ConvertChildren(structure, parent);
+                ConvertStructure(*structure);
                 /*
+                ConvertChildren(structure, *nodes_chain.back(), new_abs_transform);
                 const Model* const model = dynamic_cast<const Model*>(object);
 
                 if(model) {
@@ -244,6 +246,214 @@ private:
             std::for_each(nodes_chain.begin(), nodes_chain.end(), deleter);
         }
     }
+
+
+    void ConvertStructure(const Structure& structure) {
+        StructureType type = structure.GetStructureType();
+
+        if (type == kStructureMetric)
+        {
+            return ConvertStructureImpl(static_cast<const MetricStructure&>(structure));
+        }
+
+        if (type == kStructureVertexArray)
+        {
+            return ConvertStructureImpl(static_cast<const VertexArrayStructure&>(structure));
+        }
+
+        if (type == kStructureIndexArray)
+        {
+            return ConvertStructureImpl(static_cast<const IndexArrayStructure&>(structure));
+        }
+
+        if (type == kStructureMesh)
+        {
+            return ConvertStructureImpl(static_cast<const MeshStructure&>(structure));
+        }
+
+        if (type == kStructureNode)
+        {
+            return ConvertStructureImpl(static_cast<const NodeStructure&>(structure));
+        }
+
+        if (type == kStructureBoneNode)
+        {
+            return ConvertStructureImpl(static_cast<const BoneNodeStructure&>(structure));
+        }
+
+        if (type == kStructureGeometryNode)
+        {
+            return ConvertStructureImpl(static_cast<const GeometryNodeStructure&>(structure));
+        }
+
+        if (type == kStructureLightNode)
+        {
+            return ConvertStructureImpl(static_cast<const LightNodeStructure&>(structure));
+        }
+
+        if (type == kStructureCameraNode)
+        {
+            return ConvertStructureImpl(static_cast<const CameraNodeStructure&>(structure));
+        }
+
+        if (type == kStructureGeometryObject)
+        {
+            return ConvertStructureImpl(static_cast<const GeometryObjectStructure&>(structure));
+        }
+
+        if (type == kStructureLightObject)
+        {
+            return ConvertStructureImpl(static_cast<const LightObjectStructure&>(structure));
+        }
+
+        if (type == kStructureCameraObject)
+        {
+            return ConvertStructureImpl(static_cast<const CameraObjectStructure&>(structure));
+        }
+
+        if (type == kStructureTransform)
+        {
+            return ConvertStructureImpl(static_cast<const TransformStructure&>(structure));
+        }
+
+        if (type == kStructureTranslation)
+        {
+            return ConvertStructureImpl(static_cast<const TranslationStructure&>(structure));
+        }
+
+        if (type == kStructureRotation)
+        {
+            return ConvertStructureImpl(static_cast<const RotationStructure&>(structure));
+        }
+
+        if (type == kStructureScale)
+        {
+            return ConvertStructureImpl(static_cast<const ScaleStructure&>(structure));
+        }
+
+        if (type == kStructureName)
+        {
+            return ConvertStructureImpl(static_cast<const NameStructure&>(structure));
+        }
+
+        if (type == kStructureObjectRef)
+        {
+            return ConvertStructureImpl(static_cast<const ObjectRefStructure&>(structure));
+        }
+
+        if (type == kStructureMaterialRef)
+        {
+            return ConvertStructureImpl(static_cast<const MaterialRefStructure&>(structure));
+        }
+
+        if (type == kStructureMorph)
+        {
+            return ConvertStructureImpl(static_cast<const MorphStructure&>(structure));
+        }
+
+        if (type == kStructureBoneRefArray)
+        {
+            return ConvertStructureImpl(static_cast<const BoneRefArrayStructure&>(structure));
+        }
+
+        if (type == kStructureBoneCountArray)
+        {
+            return ConvertStructureImpl(static_cast<const BoneCountArrayStructure&>(structure));
+        }
+
+        if (type == kStructureBoneIndexArray)
+        {
+            return ConvertStructureImpl(static_cast<const BoneIndexArrayStructure&>(structure));
+        }
+
+        if (type == kStructureBoneWeightArray)
+        {
+            return ConvertStructureImpl(static_cast<const BoneWeightArrayStructure&>(structure));
+        }
+
+        if (type == kStructureSkeleton)
+        {
+            return ConvertStructureImpl(static_cast<const SkeletonStructure&>(structure));
+        }
+
+        if (type == kStructureSkin)
+        {
+            return ConvertStructureImpl(static_cast<const SkinStructure&>(structure));
+        }
+
+        if (type == kStructureMaterial)
+        {
+            return ConvertStructureImpl(static_cast<const MaterialStructure&>(structure));
+        }
+
+        if (type == kStructureParam)
+        {
+            return ConvertStructureImpl(static_cast<const ParamStructure&>(structure));
+        }
+
+        if (type == kStructureColor)
+        {
+            return ConvertStructureImpl(static_cast<const ColorStructure&>(structure));
+        }
+
+        if (type == kStructureTexture)
+        {
+            return ConvertStructureImpl(static_cast<const TextureStructure&>(structure));
+        }
+
+        if (type == kStructureAtten)
+        {
+            return ConvertStructureImpl(static_cast<const AttenStructure&>(structure));
+        }
+
+        if (type == kStructureKey)
+        {
+            return ConvertStructureImpl(static_cast<const KeyStructure&>(structure));
+        }
+
+        if (type == kStructureTime)
+        {
+            return ConvertStructureImpl(static_cast<const TimeStructure&>(structure));
+        }
+
+        if (type == kStructureValue)
+        {
+            return ConvertStructureImpl(static_cast<const ValueStructure&>(structure));
+        }
+
+        if (type == kStructureTrack)
+        {
+            return ConvertStructureImpl(static_cast<const TrackStructure&>(structure));
+        }
+
+        if (type == kStructureAnimation)
+        {
+            return ConvertStructureImpl(static_cast<const AnimationStructure&>(structure));
+        }
+
+    }
+
+
+    void ConvertStructureImpl(const Structure& structure) {
+        // No implemented.
+    }
+
+    void ConvertStructureImpl(const VertexArrayStructure& structure) {}
+    void ConvertStructureImpl(const IndexArrayStructure& structure) {}
+    void ConvertStructureImpl(const MeshStructure& structure) {}
+    void ConvertStructureImpl(const NodeStructure& structure) {}
+    void ConvertStructureImpl(const BoneNodeStructure& structure) {}
+    void ConvertStructureImpl(const GeometryNodeStructure& structure) {}
+    void ConvertStructureImpl(const LightNodeStructure& structure) {}
+    void ConvertStructureImpl(const CameraNodeStructure& structure) {}
+    void ConvertStructureImpl(const GeometryObjectStructure& structure) {}
+    void ConvertStructureImpl(const LightObjectStructure& structure) {}
+    void ConvertStructureImpl(const CameraObjectStructure& structure) {}
+    void ConvertStructureImpl(const TransformStructure& structure) {}
+    void ConvertStructureImpl(const TranslationStructure& structure) {}
+    void ConvertStructureImpl(const RotationStructure& structure) {}
+    void ConvertStructureImpl(const ScaleStructure& structure) {}
+    void ConvertStructureImpl(const NameStructure& structure) {}
 
     /*
     // ------------------------------------------------------------------------------------------------
@@ -1658,213 +1868,8 @@ private:
         }
     }
 
-    void LoadStructure(const Structure& structure) {
-        StructureType type = structure.GetStructureType();
-
-        if (type == kStructureMetric)
-        {
-            return LoadStructureImpl(static_cast<const MetricStructure&>(structure));
-        }
-
-        if (type == kStructureVertexArray)
-        {
-            return LoadStructureImpl(static_cast<const VertexArrayStructure&>(structure));
-        }
-
-        if (type == kStructureIndexArray)
-        {
-            return LoadStructureImpl(static_cast<const IndexArrayStructure&>(structure));
-        }
-
-        if (type == kStructureMesh)
-        {
-            return LoadStructureImpl(static_cast<const MeshStructure&>(structure));
-        }
-
-        if (type == kStructureNode)
-        {
-            return LoadStructureImpl(static_cast<const NodeStructure&>(structure));
-        }
-
-        if (type == kStructureBoneNode)
-        {
-            return LoadStructureImpl(static_cast<const BoneNodeStructure&>(structure));
-        }
-
-        if (type == kStructureGeometryNode)
-        {
-            return LoadStructureImpl(static_cast<const GeometryNodeStructure&>(structure));
-        }
-
-        if (type == kStructureLightNode)
-        {
-            return LoadStructureImpl(static_cast<const LightNodeStructure&>(structure));
-        }
-
-        if (type == kStructureCameraNode)
-        {
-            return LoadStructureImpl(static_cast<const CameraNodeStructure&>(structure));
-        }
-
-        if (type == kStructureGeometryObject)
-        {
-            return LoadStructureImpl(static_cast<const GeometryObjectStructure&>(structure));
-        }
-
-        if (type == kStructureLightObject)
-        {
-            return LoadStructureImpl(static_cast<const LightObjectStructure&>(structure));
-        }
-
-        if (type == kStructureCameraObject)
-        {
-            return LoadStructureImpl(static_cast<const CameraObjectStructure&>(structure));
-        }
-
-        if (type == kStructureTransform)
-        {
-            return LoadStructureImpl(static_cast<const TransformStructure&>(structure));
-        }
-
-        if (type == kStructureTranslation)
-        {
-            return LoadStructureImpl(static_cast<const TranslationStructure&>(structure));
-        }
-
-        if (type == kStructureRotation)
-        {
-            return LoadStructureImpl(static_cast<const RotationStructure&>(structure));
-        }
-
-        if (type == kStructureScale)
-        {
-            return LoadStructureImpl(static_cast<const ScaleStructure&>(structure));
-        }
-
-        if (type == kStructureName)
-        {
-            return LoadStructureImpl(static_cast<const NameStructure&>(structure));
-        }
-
-        if (type == kStructureObjectRef)
-        {
-            return LoadStructureImpl(static_cast<const ObjectRefStructure&>(structure));
-        }
-
-        if (type == kStructureMaterialRef)
-        {
-            return LoadStructureImpl(static_cast<const MaterialRefStructure&>(structure));
-        }
-
-        if (type == kStructureMorph)
-        {
-            return LoadStructureImpl(static_cast<const MorphStructure&>(structure));
-        }
-
-        if (type == kStructureBoneRefArray)
-        {
-            return LoadStructureImpl(static_cast<const BoneRefArrayStructure&>(structure));
-        }
-
-        if (type == kStructureBoneCountArray)
-        {
-            return LoadStructureImpl(static_cast<const BoneCountArrayStructure&>(structure));
-        }
-
-        if (type == kStructureBoneIndexArray)
-        {
-            return LoadStructureImpl(static_cast<const BoneIndexArrayStructure&>(structure));
-        }
-
-        if (type == kStructureBoneWeightArray)
-        {
-            return LoadStructureImpl(static_cast<const BoneWeightArrayStructure&>(structure));
-        }
-
-        if (type == kStructureSkeleton)
-        {
-            return LoadStructureImpl(static_cast<const SkeletonStructure&>(structure));
-        }
-
-        if (type == kStructureSkin)
-        {
-            return LoadStructureImpl(static_cast<const SkinStructure&>(structure));
-        }
-
-        if (type == kStructureMaterial)
-        {
-            return LoadStructureImpl(static_cast<const MaterialStructure&>(structure));
-        }
-
-        if (type == kStructureParam)
-        {
-            return LoadStructureImpl(static_cast<const ParamStructure&>(structure));
-        }
-
-        if (type == kStructureColor)
-        {
-            return LoadStructureImpl(static_cast<const ColorStructure&>(structure));
-        }
-
-        if (type == kStructureTexture)
-        {
-            return LoadStructureImpl(static_cast<const TextureStructure&>(structure));
-        }
-
-        if (type == kStructureAtten)
-        {
-            return LoadStructureImpl(static_cast<const AttenStructure&>(structure));
-        }
-
-        if (type == kStructureKey)
-        {
-            return LoadStructureImpl(static_cast<const KeyStructure&>(structure));
-        }
-
-        if (type == kStructureTime)
-        {
-            return LoadStructureImpl(static_cast<const TimeStructure&>(structure));
-        }
-
-        if (type == kStructureValue)
-        {
-            return LoadStructureImpl(static_cast<const ValueStructure&>(structure));
-        }
-
-        if (type == kStructureTrack)
-        {
-            return LoadStructureImpl(static_cast<const TrackStructure&>(structure));
-        }
-
-        if (type == kStructureAnimation)
-        {
-            return LoadStructureImpl(static_cast<const AnimationStructure&>(structure));
-        }
-
-    }
 
 private:
-
-    void LoadStructureImpl(const Structure& structure) {
-        // No implemented.
-    }
-
-    void LoadStructureImpl(const VertexArrayStructure& structure) {}
-    void LoadStructureImpl(const IndexArrayStructure& structure) {}
-    void LoadStructureImpl(const MeshStructure& structure) {}
-    void LoadStructureImpl(const NodeStructure& structure) {}
-    void LoadStructureImpl(const BoneNodeStructure& structure) {}
-    void LoadStructureImpl(const GeometryNodeStructure& structure) {}
-    void LoadStructureImpl(const LightNodeStructure& structure) {}
-    void LoadStructureImpl(const CameraNodeStructure& structure) {}
-    void LoadStructureImpl(const GeometryObjectStructure& structure) {}
-    void LoadStructureImpl(const LightObjectStructure& structure) {}
-    void LoadStructureImpl(const CameraObjectStructure& structure) {}
-    void LoadStructureImpl(const TransformStructure& structure) {}
-    void LoadStructureImpl(const TranslationStructure& structure) {}
-    void LoadStructureImpl(const RotationStructure& structure) {}
-    void LoadStructureImpl(const ScaleStructure& structure) {}
-    void LoadStructureImpl(const NameStructure& structure) {}
 
     // 0: not assigned yet, others: index is value - 1
     unsigned int defaultMaterialIndex;
