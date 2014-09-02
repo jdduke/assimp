@@ -46,10 +46,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <unordered_map>
 
-namespace Assimp {
-	template<> const std::string LogFunctions<OpenGEX::OpenGEXImporter>::log_prefix = "OpenGEX: ";
-}
-
 static const aiImporterDesc desc = {
 	"Open Game Engine Exchange",
 	"",
@@ -89,6 +85,108 @@ bool IsNode(const Structure& structure) {
 	       type == kStructureLightNode ||
 	       type == kStructureCameraNode ||
 	       type == kStructureGeometryNode;
+}
+
+void ConvertFloatArray(const float* data, aiVector3D& v) {
+	v.x = data[0];
+	v.y = data[1];
+	v.z = data[2];
+}
+
+void ConvertFloatArray(const float* data, aiColor4D& c) {
+	c.r = data[0];
+	c.g = data[1];
+	c.b = data[2];
+	c.a = data[3];
+}
+
+void ConvertFloatArray(const float* data, aiMatrix4x4& m) {
+	m.a1 = data[0];
+	m.a2 = data[1];
+	m.a3 = data[2];
+	m.a4 = data[3];
+	m.b1 = data[4];
+	m.b2 = data[5];
+	m.b3 = data[6];
+	m.b4 = data[7];
+	m.c1 = data[8];
+	m.c2 = data[9];
+	m.c3 = data[10];
+	m.c4 = data[11];
+	m.d1 = data[12];
+	m.d2 = data[13];
+	m.d3 = data[14];
+	m.d4 = data[15];
+}
+
+size_t GetArrayAttribIndex(const String& attrib) {
+	const char* attribCstr = static_cast<const char*>(attrib);
+
+	const char* bracketBegin = strchr(attribCstr, '[');
+	if (!bracketBegin) return 0;
+
+	const char* bracketEnd = strchr(bracketBegin, ']');
+	if (!bracketEnd) return 0;
+
+	size_t n = bracketEnd - bracketBegin - 1;
+	if (!n) return 0;
+
+	std::string attribIndexStr(bracketBegin + 1, n);
+	return std::stoul(attribIndexStr);
+}
+
+template <typename Type>
+void ConvertVertexArray(const VertexArrayStructure& structure, Type** pVertexArray, unsigned int* pNumVertices) {
+		const DataStructure<FloatDataType>& dataStructure = *structure.GetDataStructure();
+		int32 arraySize = dataStructure.GetArraySize();
+		int32 elementCount = dataStructure.GetDataElementCount();
+		int32 vertexCount = elementCount / arraySize;
+		const float *data = &dataStructure.GetDataElement(0);
+
+		*pVertexArray = new Type[vertexCount];
+		if (*pNumVertices) {
+			ai_assert(*pNumVertices == vertexCount);
+		}
+		*pNumVertices = vertexCount;
+
+		for (int32 i = 0; i < vertexCount; ++i, data += arraySize) {
+			ConvertFloatArray(data, (*pVertexArray)[i]);
+		}
+}
+
+template <typename DataType>
+void ConvertTypedIndexArray(const PrimitiveStructure& primitiveStructure, aiFace** pFaceArray, unsigned int* pNumFaces) {
+	const DataStructure<DataType>& dataStructure = static_cast<const DataStructure<DataType>&>(primitiveStructure);
+	const auto* data = &dataStructure.GetDataElement(0);
+
+	int32 arraySize = dataStructure.GetArraySize();
+	int32 elementCount = dataStructure.GetDataElementCount();
+	int32 faceCount = elementCount / arraySize;
+
+	*pFaceArray = new aiFace[faceCount];
+	*pNumFaces = faceCount;
+
+	for (int32 i = 0; i < faceCount; ++i, data += arraySize) {
+		(*pFaceArray)[i].mNumIndices = arraySize;
+		(*pFaceArray)[i].mIndices = new unsigned int[arraySize];
+		for (int32 i = 0; i < arraySize; ++i) {
+			(*pFaceArray)[i].mIndices[i] = static_cast<unsigned int>(data[i]);
+		}
+	}
+}
+
+void ConvertIndexArray(const IndexArrayStructure& structure, aiFace** pFaceArray, unsigned int* pNumFaces) {
+	const PrimitiveStructure* primitiveStructure = structure.GetPrimitiveStructure();
+	StructureType type = primitiveStructure->GetStructureType();
+	if (type == kDataUnsignedInt8) {
+		return ConvertTypedIndexArray<UnsignedInt8DataType>(*primitiveStructure, pFaceArray, pNumFaces);
+	} else if (type == kDataUnsignedInt16) {
+		return ConvertTypedIndexArray<UnsignedInt16DataType>(*primitiveStructure, pFaceArray, pNumFaces);
+	} else if (type == kDataUnsignedInt32) {
+		return ConvertTypedIndexArray<UnsignedInt32DataType>(*primitiveStructure, pFaceArray, pNumFaces);
+	} else {
+		return ConvertTypedIndexArray<UnsignedInt64DataType>(*primitiveStructure, pFaceArray, pNumFaces);
+	}
 }
 
 template <typename Type>
@@ -319,11 +417,11 @@ private:
 		ai_assert(IsNode(nodeStructure));
 		StructureType type = nodeStructure.GetStructureType();
 		switch (nodeStructure.GetStructureType()) {
-			case kStructureNode: return ConvertNode(static_cast<const NodeStructure&>(nodeStructure));
-			case kStructureBoneNode: return ConvertBoneNode(static_cast<const BoneNodeStructure&>(nodeStructure));
+			case kStructureNode:         return ConvertNode(static_cast<const NodeStructure&>(nodeStructure));
+			case kStructureBoneNode:     return ConvertBoneNode(static_cast<const BoneNodeStructure&>(nodeStructure));
 			case kStructureGeometryNode: return ConvertGeometryNode(static_cast<const GeometryNodeStructure&>(nodeStructure));
-			case kStructureLightNode: return ConvertLightNode(static_cast<const LightNodeStructure&>(nodeStructure));
-			case kStructureCameraNode: return ConvertCameraNode(static_cast<const CameraNodeStructure&>(nodeStructure));
+			case kStructureLightNode:    return ConvertLightNode(static_cast<const LightNodeStructure&>(nodeStructure));
+			case kStructureCameraNode:   return ConvertCameraNode(static_cast<const CameraNodeStructure&>(nodeStructure));
 			default:
 				ai_assert(false && "Invalid node structure type");
 				break;
@@ -438,6 +536,17 @@ private:
 		return move(node);
 	}
 
+	unsigned int ConvertPrimitiveType(const String& primitive) {
+		if (primitive == "points") return aiPrimitiveType_POINT;
+		if (primitive == "lines") return aiPrimitiveType_LINE;
+		if (primitive == "line_strip") ThrowException("Line strip not yet supported");
+		if (primitive == "triangles") return aiPrimitiveType_TRIANGLE;
+		if (primitive == "triangle_strip") ThrowException("Triangle strip not yet supported");
+		if (primitive == "quads") return aiPrimitiveType_POLYGON;
+		ThrowException("Invalid primitive type");
+		return 0;
+	}
+
 	unique_ptr<aiMesh> ConvertMesh(const MeshStructure& structure) {
 		unique_ptr<aiMesh> mesh(new aiMesh());
 
@@ -449,18 +558,26 @@ private:
 				case kStructureVertexArray: {
 					const VertexArrayStructure& vertexArrayStructure = *static_cast<const VertexArrayStructure *>(subStructure);
 					const String& arrayAttrib = vertexArrayStructure.GetArrayAttrib();
+					size_t attribIndex = GetArrayAttribIndex(arrayAttrib);
 					if (arrayAttrib == "position") {
-
+						if (attribIndex > 0) continue;
+						ConvertVertexArray(vertexArrayStructure, &mesh->mVertices, &mesh->mNumVertices);
 					} else if (arrayAttrib == "normal") {
-
+						if (attribIndex > 0) continue;
+						ConvertVertexArray(vertexArrayStructure, &mesh->mNormals, &mesh->mNumVertices);
 					} else if (arrayAttrib == "tangent") {
-
+						if (attribIndex > 0) continue;
+						ConvertVertexArray(vertexArrayStructure, &mesh->mTangents, &mesh->mNumVertices);
 					} else if (arrayAttrib == "bitangent") {
-
+						if (attribIndex > 0) continue;
+						ConvertVertexArray(vertexArrayStructure, &mesh->mBitangents, &mesh->mNumVertices);
 					} else if (arrayAttrib == "color") {
-
+						if (attribIndex >= AI_MAX_NUMBER_OF_COLOR_SETS) continue;
+						ConvertVertexArray(vertexArrayStructure, &(mesh->mColors[attribIndex]), &mesh->mNumVertices);
 					} else if (arrayAttrib == "texcoord") {
-
+						if (attribIndex >= AI_MAX_NUMBER_OF_TEXTURECOORDS) continue;
+						ConvertVertexArray(vertexArrayStructure, &(mesh->mTextureCoords[attribIndex]), &mesh->mNumVertices);
+						mesh->mNumUVComponents[attribIndex] = vertexArrayStructure.GetDataStructure()->GetArraySize();
 					}
 				} break;
 
@@ -480,26 +597,6 @@ private:
 		// TODO: Handle skin structure.
 
 		return move(mesh);
-	}
-
-	unsigned int ConvertPrimitiveType(const String& primitive) {
-		if (primitive == "points") return aiPrimitiveType_POINT;
-		if (primitive == "lines") return aiPrimitiveType_LINE;
-		if (primitive == "line_strip") ThrowException("Line strip not yet supported");
-		if (primitive == "triangles") return aiPrimitiveType_TRIANGLE;
-		if (primitive == "triangle_strip") ThrowException("Triangle strip not yet supported");
-		if (primitive == "quads") return aiPrimitiveType_POLYGON;
-		ThrowException("Invalid primitive type");
-		return 0;
-	}
-
-	template <typename Type>
-	void ConvertVertexArray(const VertexArrayStructure& structure, Type** pDest, unsigned int* pNumVertices) {
-
-	}
-
-	void ConvertIndexArray(const IndexArrayStructure& structure, aiFace** pDest, unsigned int* pNumFaces) {
-
 	}
 
 	// Move all generated meshes, animations, lights, cameras and textures to the output scene.
@@ -535,11 +632,8 @@ private:
 	const OpenGexDataDescription& desc;
 };
 
-void ConvertToAssimpScene( aiScene *pScene, const OpenGexDataDescription& desc ) {
-	OpenGEXConverter conv(pScene, desc);
-}
-
 } // namespace
+
 
 //------------------------------------------------------------------------------------------------
 OpenGEXImporter::OpenGEXImporter() {
@@ -583,7 +677,7 @@ void OpenGEXImporter::InternReadFile( const std::string &file, aiScene *pScene, 
 		ThrowException("Failed to load OpenGEX file");
 	}
 
-	ConvertToAssimpScene(pScene, openGexDataDescription);
+	OpenGEXConverter conv(pScene, openGexDataDescription);
 }
 
 //------------------------------------------------------------------------------------------------
@@ -600,5 +694,8 @@ void OpenGEXImporter::SetupProperties( const Importer *pImp ) {
 
 } // Namespace OpenGEX
 } // Namespace Assimp
+
+template<> const std::string Assimp::LogFunctions<Assimp::OpenGEX::OpenGEXConverter>::log_prefix = "OpenGEX: ";
+template<> const std::string Assimp::LogFunctions<Assimp::OpenGEX::OpenGEXImporter>::log_prefix = "OpenGEX: ";
 
 #endif // ASSIMP_BUILD_NO_OPENGEX_IMPORTER

@@ -202,6 +202,8 @@ namespace OGEX
 			unsigned_int64			restartIndex;
 			String					frontFace;
 
+			const PrimitiveStructure	*primitiveStructure;
+
 		public:
 
 			IndexArrayStructure();
@@ -220,6 +222,11 @@ namespace OGEX
 			const String& GetFrontFace(void) const
 			{
 				return (frontFace);
+			}
+
+			const PrimitiveStructure *GetPrimitiveStructure() const
+			{
+				return (primitiveStructure);
 			}
 
 			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;

@@ -281,7 +281,7 @@ DataResult IndexArrayStructure::ProcessData(DataDescription *dataDescription)
 		return (kDataExtraneousSubstructure);
 	}
 
-	const PrimitiveStructure *primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
+	primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
 	if (primitiveStructure->GetArraySize() != 3)
 	{
 		return (kDataInvalidDataFormat);
