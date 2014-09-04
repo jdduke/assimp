@@ -1051,9 +1051,16 @@ void Importer::GetMemoryRequirements(aiMemoryInfo& in) const
 				in.meshes += mScene->mMeshes[i]->mBones[p]->mNumWeights * sizeof(aiVertexWeight);
 			}
 		}
+		for (unsigned int f = 0; f < mScene->mMeshes[i]->mNumFaces; ++f) {
+			in.meshes += sizeof(aiFace);
+			const unsigned int numIndices = mScene->mMeshes[i]->mFaces[f].mNumIndices;
+			if (numIndices > 4) {
+				in.meshes += (numIndices - 4) * sizeof(unsigned int);
+			}
+		}
 		in.meshes += (sizeof(aiFace) + 3 * sizeof(unsigned int))*mScene->mMeshes[i]->mNumFaces;
 	}
-    in.total += in.meshes;
+	in.total += in.meshes;
 
 	// add all embedded textures
 	for (unsigned int i = 0; i < mScene->mNumTextures;++i) {

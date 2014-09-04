@@ -275,7 +275,7 @@ void SplitLargeMeshesProcess_Triangle::SplitMesh(
 			unsigned int iCurrent = 0;
 			for (unsigned int p = 0; p < pcMesh->mNumFaces;++p)
 			{
-				pcMesh->mFaces[p].mNumIndices = 3;
+				pcMesh->mFaces[p].Initialize(3);
 				// allocate a new array
 				const unsigned int iTemp = p + iBase;
 				const unsigned int iNumIndices = pMesh->mFaces[iTemp].mNumIndices;
@@ -283,7 +283,7 @@ void SplitLargeMeshesProcess_Triangle::SplitMesh(
 				// setup face type and number of indices
 				pcMesh->mFaces[p].mNumIndices = iNumIndices;
 				unsigned int* pi = pMesh->mFaces[iTemp].mIndices;
-				unsigned int* piOut = pcMesh->mFaces[p].mIndices = new unsigned int[iNumIndices];
+				unsigned int* piOut = pcMesh->mFaces[p].mIndices;
 
 				// need to update the output primitive types
 				switch (iNumIndices)
@@ -523,8 +523,7 @@ void SplitLargeMeshesProcess_Vertex::SplitMesh(
 				aiFace& rFace = vFaces.back();
 
 				// setup face type and number of indices
-				rFace.mNumIndices = iNumIndices;
-				rFace.mIndices = new unsigned int[iNumIndices];
+				rFace.Initialize(iNumIndices);
 
 				// need to update the output primitive types
 				switch (rFace.mNumIndices)

@@ -177,21 +177,12 @@ evil_jump_outside:
 			if (!remove_me[a]) {
 				aiFace& face_dest = mesh->mFaces[n++];
 
-				// Do a manual copy, keep the index array
-				face_dest.mNumIndices = face_src.mNumIndices;
-				face_dest.mIndices    = face_src.mIndices;
-
-				if (&face_src != &face_dest) {
-					// clear source
-					face_src.mNumIndices = 0;
-					face_src.mIndices = NULL;
-				}
+				// Do a manual swap, preserving the index array
+				face_dest.Swap(face_src);
 			}
 			else {
 				// Otherwise delete it if we don't need this face
-				delete[] face_src.mIndices;
-				face_src.mIndices = NULL;
-				face_src.mNumIndices = 0;
+				face_src = aiFace();
 			}
 		}
 		// Just leave the rest of the array unreferenced, we don't care for now

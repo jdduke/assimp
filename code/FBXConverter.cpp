@@ -899,9 +899,8 @@ private:
 		unsigned int cursor = 0;
 		BOOST_FOREACH(unsigned int pcount, faces) {
 			aiFace& f = *fac++;
-			f.mNumIndices = pcount;
-			f.mIndices = new unsigned int[pcount];
-			switch(pcount) 
+			f.Initialize(pcount);
+			switch(pcount)
 			{
 			case 1:
 				out_mesh->mPrimitiveTypes |= aiPrimitiveType_POINT;
@@ -1146,10 +1145,8 @@ private:
 			}
 
 			aiFace& f = *fac++;
-
-			f.mNumIndices = pcount;
-			f.mIndices = new unsigned int[pcount];
-			switch(pcount) 
+			f.Initialize(pcount);
+			switch(pcount)
 			{
 			case 1:
 				out_mesh->mPrimitiveTypes |= aiPrimitiveType_POINT;

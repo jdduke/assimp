@@ -860,15 +860,13 @@ void SceneCombiner::MergeMeshes(aiMesh** _out,unsigned int /*flags*/,
 		for (std::vector<aiMesh*>::const_iterator it = begin; it != end;++it)	{
 			for (unsigned int m = 0; m < (*it)->mNumFaces;++m,++pf2)	{
 				aiFace& face = (*it)->mFaces[m];
-				pf2->mNumIndices = face.mNumIndices;
-				pf2->mIndices = face.mIndices;
 
 				if (ofs)	{
 					// add the offset to the vertex
 					for (unsigned int q = 0; q < face.mNumIndices; ++q)
-						face.mIndices[q] += ofs;	
+						face.mIndices[q] += ofs;
 				}
-				face.mIndices = NULL;
+				face.Swap(*pf2);
 			}
 			ofs += (*it)->mNumVertices;
 		}

@@ -36,15 +36,14 @@ void TriangulateProcessTest::SetUp()
 	{
 		++t;
 		aiFace& face = pcMesh->mFaces[m];
-		face.mNumIndices = t;
+		face.Initialize(t);
 		if (4 == t)
 		{
-			face.mNumIndices = q++;
+			face.Initialize(q++);
 			t = 0;
 
 			if (10 == q)q = 4;
 		}
-		face.mIndices = new unsigned int[face.mNumIndices];
 		for (unsigned int p = 0; p < face.mNumIndices; ++p)
 		{
 			face.mIndices[p] = pcMesh->mNumVertices;
@@ -110,4 +109,3 @@ TEST_F(TriangulateProcessTest, testTriangulation)
 
 	// we should have no valid normal vectors now necause we aren't a pure polygon mesh
 	EXPECT_TRUE(pcMesh->mNormals == NULL);
-}

@@ -496,8 +496,8 @@ void MS3DImporter::InternReadFile( const std::string& pFile,
 			}
 
 			TempTriangle& t = triangles[g.triangles[i]];
-			f.mIndices = new unsigned int[f.mNumIndices=3];
-			
+			f.Initialize(3);
+
 			for (unsigned int i = 0; i < 3; ++i,++n) {
 				if (t.indices[i]>vertices.size()) {
 					throw DeadlyImportError("MS3D: Encountered invalid vertex index, file is malformed");

@@ -240,11 +240,10 @@ void PretransformVertices::CollectData( aiScene* pcScene, aiNode* pcNode, unsign
 
 				const unsigned int num_idx = f_src.mNumIndices;
 
-				f_dst.mNumIndices = num_idx; 
-
 				unsigned int* pi;
 				if (!num_ref) { /* if last time the mesh is referenced -> no reallocation */
-					pi = f_dst.mIndices = f_src.mIndices; 
+					f_dst.Swap(f_src);
+					pi = f_dst.mIndices;
 
 					// offset all vertex indices
 					for (unsigned int hahn = 0; hahn < num_idx;++hahn){
@@ -252,8 +251,9 @@ void PretransformVertices::CollectData( aiScene* pcScene, aiNode* pcNode, unsign
 					}
 				}
 				else {
-					pi = f_dst.mIndices = new unsigned int[num_idx];
-					
+					f_dst.Initialize(num_idx);
+					pi = f_dst.mIndices;
+
 					// copy and offset all vertex indices
 					for (unsigned int hahn = 0; hahn < num_idx;++hahn){
 						pi[hahn] = f_src.mIndices[hahn] + aiCurrent[AI_PTVS_VERTEX];
@@ -559,12 +559,6 @@ void PretransformVertices::Execute( aiScene* pScene)
 				aiMesh* mesh = pScene->mMeshes[i];
 				mesh->mNumBones = 0;
 				mesh->mBones    = NULL;
-
-				// we're reusing the face index arrays. avoid destruction
-				for (unsigned int a = 0; a < mesh->mNumFaces; ++a) {
-					mesh->mFaces[a].mNumIndices = 0;
-					mesh->mFaces[a].mIndices = NULL;
-				}
 
 				delete mesh;
 

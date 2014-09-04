@@ -381,11 +381,7 @@ void B3DImporter::ReadTRIS( int v0 ){
 			Fail( "Bad triangle index" );
 			continue;
 		}
-		face->mNumIndices=3;
-		face->mIndices=new unsigned[3];
-		face->mIndices[0]=i0;
-		face->mIndices[1]=i1;
-		face->mIndices[2]=i2;
+		face->InitializeFace3(i0, i1, i2);
 		++mesh->mNumFaces;
 		++face;
 	}

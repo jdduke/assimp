@@ -220,11 +220,9 @@ aiMesh* SkeletonMeshBuilder::CreateMesh()
 	{
 		const Face& inface = mFaces[a];
 		aiFace& outface = mesh->mFaces[a];
-		outface.mNumIndices = 3;
-		outface.mIndices = new unsigned int[3];
-		outface.mIndices[0] = inface.mIndices[0];
-		outface.mIndices[1] = inface.mIndices[1];
-		outface.mIndices[2] = inface.mIndices[2];
+		outface.InitializeFace3(inface.mIndices[0],
+		                        inface.mIndices[1],
+		                        inface.mIndices[2]);
 
 		// Compute per-face normals ... we don't want the bones to be smoothed ... they're built to visualize
 		// the skeleton, so it's good if there's a visual difference to the rest of the geometry

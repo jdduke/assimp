@@ -320,26 +320,24 @@ aiMesh *ObjFileImporter::createTopology( const ObjFile::Model* pModel, const Obj
 			if (inp->m_PrimitiveType == aiPrimitiveType_LINE) {
 				for(size_t i = 0; i < inp->m_pVertices->size() - 1; ++i) {
 					aiFace& f = pMesh->mFaces[ outIndex++ ];
-					uiIdxCount += f.mNumIndices = 2;
-					f.mIndices = new unsigned int[2];
+					f.Initialize(2);
+					uiIdxCount += 2;
 				}
 				continue;
 			}
 			else if (inp->m_PrimitiveType == aiPrimitiveType_POINT) {
 				for(size_t i = 0; i < inp->m_pVertices->size(); ++i) {
 					aiFace& f = pMesh->mFaces[ outIndex++ ];
-					uiIdxCount += f.mNumIndices = 1;
-					f.mIndices = new unsigned int[1];
+					f.Initialize(1);
+					uiIdxCount += 1;
 				}
 				continue;
 			}
 
 			aiFace *pFace = &pMesh->mFaces[ outIndex++ ];
 			const unsigned int uiNumIndices = (unsigned int) pObjMesh->m_Faces[ index ]->m_pVertices->size();
-			uiIdxCount += pFace->mNumIndices = (unsigned int) uiNumIndices;
-			if (pFace->mNumIndices > 0) {
-				pFace->mIndices = new unsigned int[ uiNumIndices ];			
-			}
+			pFace->Initialize(uiNumIndices);
+			uiIdxCount += (unsigned int) uiNumIndices;
 		}
 	}
 

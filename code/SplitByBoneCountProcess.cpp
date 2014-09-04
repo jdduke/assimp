@@ -269,8 +269,7 @@ void SplitByBoneCountProcess::SplitMesh( const aiMesh* pMesh, std::vector<aiMesh
 		{
 			const aiFace& srcFace = pMesh->mFaces[subMeshFaces[a]];
 			aiFace& dstFace = newMesh->mFaces[a];
-			dstFace.mNumIndices = srcFace.mNumIndices;
-			dstFace.mIndices = new unsigned int[dstFace.mNumIndices];
+			dstFace.Initialize(srcFace.mNumIndices);
 
 			// accumulate linearly all the vertices of the source face
 			for( size_t b = 0; b < dstFace.mNumIndices; ++b )

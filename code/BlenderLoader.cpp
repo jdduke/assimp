@@ -755,12 +755,12 @@ void BlenderImporter::ConvertMesh(const Scene& /*in*/, const Object* /*obj*/, co
 		aiMesh* const out = temp[ mat_num_to_mesh_idx[ mf.mat_nr ] ];
 		aiFace& f = out->mFaces[out->mNumFaces++];
 
-		f.mIndices = new unsigned int[ f.mNumIndices = mf.v4?4:3 ];
+		f.Initialize(mf.v4 ? 4U : 3U);
 		aiVector3D* vo = out->mVertices + out->mNumVertices;
 		aiVector3D* vn = out->mNormals + out->mNumVertices;
 
 		// XXX we can't fold this easily, because we are restricted
-		// to the member names from the BLEND file (v1,v2,v3,v4) 
+		// to the member names from the BLEND file (v1,v2,v3,v4)
 		// which are assigned by the genblenddna.py script and
 		// cannot be changed without breaking the entire
 		// import process.
@@ -840,8 +840,8 @@ void BlenderImporter::ConvertMesh(const Scene& /*in*/, const Object* /*obj*/, co
 		
 		aiMesh* const out = temp[ mat_num_to_mesh_idx[ mf.mat_nr ] ];
 		aiFace& f = out->mFaces[out->mNumFaces++];
-		
-		f.mIndices = new unsigned int[ f.mNumIndices = mf.totloop ];
+
+		f.Initialize(mf.totloop);
 		aiVector3D* vo = out->mVertices + out->mNumVertices;
 		aiVector3D* vn = out->mNormals + out->mNumVertices;
 		

@@ -124,12 +124,15 @@ extern "C" {
  */
 struct aiFace
 {
-	//! Number of indices defining this face. 
+	//! Number of indices defining this face.
 	//! The maximum value for this member is #AI_MAX_FACE_INDICES.
-	unsigned int mNumIndices; 
+	unsigned int mNumIndices;
 
 	//! Pointer to the indices array. Size of the array is given in numIndices.
-	unsigned int* mIndices;   
+	unsigned int* mIndices;
+
+	//! Local storage when #mNumIndices is 4 or less.
+	unsigned int mIndicesStorage[4];
 
 #ifdef __cplusplus
 
@@ -143,7 +146,7 @@ struct aiFace
 	//! Default destructor. Delete the index array
 	~aiFace()
 	{
-		delete [] mIndices;
+		DeallocateIndices();
 	}
 
 	//! Copy constructor. Copy the index array
@@ -159,19 +162,11 @@ struct aiFace
 		if (&o == this)
 			return *this;
 
-		delete[] mIndices;
-		mNumIndices = o.mNumIndices;
-		if (mNumIndices) {
-			mIndices = new unsigned int[mNumIndices];
-			::memcpy( mIndices, o.mIndices, mNumIndices * sizeof( unsigned int));
-		}
-		else {
-			mIndices = NULL;
-		}
+		Initialize(o.mNumIndices, o.mIndices);
 		return *this;
 	}
 
-	//! Comparison operator. Checks whether the index array 
+	//! Comparison operator. Checks whether the index array
 	//! of two faces is identical
 	bool operator== (const aiFace& o) const
 	{
@@ -185,11 +180,92 @@ struct aiFace
 		return false;
 	}
 
-	//! Inverse comparison operator. Checks whether the index 
+	//! Inverse comparison operator. Checks whether the index
 	//! array of two faces is NOT identical
 	bool operator != (const aiFace& o) const
 	{
 		return !(*this == o);
+	}
+
+	void Initialize(size_t numIndices) {
+		DeallocateIndices();
+		mNumIndices = numIndices;
+		if (numIndices) {
+			AllocateIndices();
+		}
+	}
+
+	void Initialize(size_t numIndices, const unsigned int* indices) {
+		Initialize(numIndices);
+		if (numIndices) {
+			::memcpy( mIndices, indices, mNumIndices * sizeof(unsigned int));
+		}
+	}
+
+	void InitializeFace3(unsigned int i0, unsigned int i1, unsigned int i2) {
+		Initialize(3);
+		mIndicesStorage[0] = i0;
+		mIndicesStorage[1] = i1;
+		mIndicesStorage[2] = i2;
+	}
+
+	void InitializeFace4(unsigned int i0, unsigned int i1, unsigned int i2, unsigned int i3) {
+		Initialize(4);
+		mIndicesStorage[0] = i0;
+		mIndicesStorage[1] = i1;
+		mIndicesStorage[2] = i2;
+		mIndicesStorage[3] = i3;
+	}
+
+	void Swap(aiFace& o) {
+		if (this == &o)
+			return;
+
+		if (IndicesOnHeap() && o.IndicesOnHeap()) {
+			std::swap(mIndices, o.mIndices);
+			std::swap(mNumIndices, o.mNumIndices);
+			return;
+		}
+
+		if (IndicesOnHeap()) {
+			// Tranfer this heap array to the other face.
+			o.mIndices = mIndices;
+			// Transfer the other local array to this face.
+			std::copy(o.mIndicesStorage, o.mIndicesStorage + o.mNumIndices, mIndicesStorage);
+			mIndices = mIndicesStorage;
+			std::swap(mNumIndices, o.mNumIndices);
+			return;
+		}
+
+		if (o.IndicesOnHeap()) {
+			o.Swap(*this);
+			return;
+		}
+
+		std::swap(mNumIndices, o.mNumIndices);
+		std::swap_ranges(mIndicesStorage, mIndicesStorage + 4, o.mIndicesStorage);
+		mIndices = mIndicesStorage;
+		o.mIndices = o.mIndicesStorage;
+	}
+
+private:
+	bool IndicesOnHeap() const {
+		return mNumIndices > 4;
+	}
+
+	void AllocateIndices() {
+		if (IndicesOnHeap()) {
+			mIndices = new unsigned int[mNumIndices];
+		} else if (mNumIndices) {
+			mIndices = mIndicesStorage;
+		}
+	}
+
+	void DeallocateIndices() {
+		if (IndicesOnHeap() && mIndices != mIndicesStorage) {
+			delete [] mIndices;
+		}
+		mIndices = NULL;
 	}
 #endif // __cplusplus
 }; // struct aiFace

@@ -180,13 +180,8 @@ void STLImporter::InternReadFile( const std::string& pFile,
 
 	// now copy faces
 	pMesh->mFaces = new aiFace[pMesh->mNumFaces];
-	for (unsigned int i = 0, p = 0; i < pMesh->mNumFaces;++i)	{
-
-		aiFace& face = pMesh->mFaces[i];
-		face.mIndices = new unsigned int[face.mNumIndices = 3];
-		for (unsigned int o = 0; o < 3;++o,++p) {
-			face.mIndices[o] = p;
-		}
+	for (unsigned int i = 0, p = 0; i < pMesh->mNumFaces; ++i, p+=3) {
+		pMesh->mFaces[i].InitializeFace3(p, p + 1, p + 2);
 	}
 
 	// create a single default material, using a light gray diffuse color for consistency with
