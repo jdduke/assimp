@@ -313,8 +313,7 @@ void XFileImporter::CreateMeshes( aiScene* pScene, aiNode* pNode, const std::vec
 
 				// create face. either triangle or triangle fan depending on the index count
 				aiFace& df = mesh->mFaces[c]; // destination face
-				df.mNumIndices = (unsigned int)pf.mIndices.size();
-				df.mIndices = new unsigned int[ df.mNumIndices];
+				df.Initialize((unsigned int)pf.mIndices.size());
 
 				// collect vertex data for indices of this face
 				for( unsigned int d = 0; d < df.mNumIndices; d++)

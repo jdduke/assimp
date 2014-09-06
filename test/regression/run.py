@@ -124,8 +124,9 @@ class results:
     def report_results(self):
         """Write results to ../results/run_regression_suite_failures.txt"""
 
+        runs = len(self.success) + len(self.failures)
         print("\n" + ('='*60) + "\n" + "SUCCESS: {0}\nFAILURE: {1}\nPercentage good: {2}".format(
-            len(self.success), len(self.failures), len(self.success)/(len(self.success)+len(self.failures))  ) + 
+            len(self.success), len(self.failures), (len(self.success)/runs) if runs > 0 else 0) + 
               "\n" + ('='*60) + "\n")
 
         with open(os.path.join('..', 'results',outfilename_failur), "wt") as f:

@@ -511,8 +511,7 @@ outer:
 		{
 			Mesh& m    = meshes[(*it).first];
 			Face& face = m.faces[(*it).second];
-			faces->mNumIndices = (unsigned int)face.indices.size();
-			faces->mIndices = new unsigned int [faces->mNumIndices]; 
+			faces->Initialize((unsigned int)face.indices.size());
 
 
 			aiVector3D faceNormal;

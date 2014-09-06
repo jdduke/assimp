@@ -446,8 +446,7 @@ void MDLImporter::InternReadFile_Quake1( )
 	unsigned int iCurrent = 0;
 	for (unsigned int i = 0; i < (unsigned int) pcHeader->num_tris;++i)
 	{
-		pcMesh->mFaces[i].mIndices = new unsigned int[3];
-		pcMesh->mFaces[i].mNumIndices = 3;
+		pcMesh->mFaces[i].Initialize(3);
 
 		unsigned int iTemp = iCurrent;
 		for (unsigned int c = 0; c < 3;++c,++iCurrent)
@@ -657,8 +656,7 @@ void MDLImporter::InternReadFile_3DGS_MDL345( )
 		// now iterate through all triangles
 		unsigned int iCurrent = 0;
 		for (unsigned int i = 0; i < (unsigned int) pcHeader->num_tris;++i)	{
-			pcMesh->mFaces[i].mIndices = new unsigned int[3];
-			pcMesh->mFaces[i].mNumIndices = 3;
+			pcMesh->mFaces[i].Initialize(3);
 
 			unsigned int iTemp = iCurrent;
 			for (unsigned int c = 0; c < 3;++c,++iCurrent)	{
@@ -712,8 +710,7 @@ void MDLImporter::InternReadFile_3DGS_MDL345( )
 		// now iterate through all triangles
 		unsigned int iCurrent = 0;
 		for (unsigned int i = 0; i < (unsigned int) pcHeader->num_tris;++i)	{
-			pcMesh->mFaces[i].mIndices = new unsigned int[3];
-			pcMesh->mFaces[i].mNumIndices = 3;
+			pcMesh->mFaces[i].Initialize(3);
 
 			unsigned int iTemp = iCurrent;
 			for (unsigned int c = 0; c < 3;++c,++iCurrent)	{
@@ -1823,8 +1820,7 @@ void MDLImporter::GenerateOutputMeshes_3DGS_MDL7(
 			// iterate through all faces and build an unique set of vertices
 			unsigned int iCurrent = 0;
 			for (unsigned int iFace = 0; iFace < pcMesh->mNumFaces;++iFace)	{
-				pcMesh->mFaces[iFace].mNumIndices = 3;
-				pcMesh->mFaces[iFace].mIndices = new unsigned int[3];
+				pcMesh->mFaces[iFace].Initialize(3);
 
 				unsigned int iSrcFace = splitGroupData.aiSplit[i]->operator[](iFace);
 				const MDL::IntFace_MDL7& oldFace = groupData.pcFaces[iSrcFace];

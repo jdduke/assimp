@@ -165,14 +165,13 @@ void LWOImporter::CopyFaceIndicesLWOB(FaceList::iterator& it,
 		LWO::Face& face = *it;++it;
 		uint16_t numIndices;
 		::memcpy(&numIndices, cursor++, 2);
-		face.mNumIndices = numIndices;
+		face.Initialize(numIndices);
 		if(face.mNumIndices)
 		{
 			if (cursor + face.mNumIndices >= end)
 			{
 				break;
 			}
-			face.mIndices = new unsigned int[face.mNumIndices];
 			for (unsigned int i = 0; i < face.mNumIndices;++i)
 			{
 				unsigned int & mi = face.mIndices[i];

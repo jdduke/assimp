@@ -344,8 +344,7 @@ void AssbinImporter::ReadBinaryMesh( IOStream * stream, aiMesh* mesh )
 			aiFace& f = mesh->mFaces[i];
 
 			BOOST_STATIC_ASSERT(AI_MAX_FACE_INDICES <= 0xffff);
-			f.mNumIndices = Read<uint16_t>(stream);
-			f.mIndices = new unsigned int[f.mNumIndices];
+			f.Initialize(Read<uint16_t>(stream));
 
 			for (unsigned int a = 0; a < f.mNumIndices;++a) {
 				if (mesh->mNumVertices < (1u<<16)) 

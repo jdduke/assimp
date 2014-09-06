@@ -575,8 +575,7 @@ void OgreXmlSerializer::ReadSubMesh(MeshXml *mesh)
 			while(m_currentNodeName == nnFace)
 			{
 				aiFace face;
-				face.mNumIndices = 3;
-				face.mIndices = new unsigned int[3];
+				face.Initialize(3);
 				face.mIndices[0] = ReadAttribute<uint32_t>(anV1);
 				face.mIndices[1] = ReadAttribute<uint32_t>(anV2);
 				face.mIndices[2] = ReadAttribute<uint32_t>(anV3);

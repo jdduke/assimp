@@ -263,7 +263,7 @@ aiNode* COBImporter::BuildNodes(const Node& root,const Scene& scin,aiScene* fill
 						}
 
 						aiFace& fout = outmesh->mFaces[outmesh->mNumFaces++];
-						fout.mIndices = new unsigned int[f->indices.size()];
+						fout.Initialize((unsigned int)f->indices.size());
 
 						for_each(VertexIndex& v, f->indices) {
 							if (v.pos_idx >= ndmesh.vertex_positions.size()) {

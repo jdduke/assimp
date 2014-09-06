@@ -31,8 +31,7 @@ TEST_F(VTAdjacencyTest, largeRandomDataSet)
 	for (unsigned int i = 0; i < 600;++i)
 	{
 		aiFace& face = mesh.mFaces[i];
-		face.mNumIndices = 3;
-		face.mIndices = new unsigned int[3];
+		face.Initialize(3);
 
 		if (499 == iCurrent)iCurrent = 0;
 		face.mIndices[0] = iCurrent++;
@@ -58,9 +57,9 @@ TEST_F(VTAdjacencyTest, smallDataSet)
 	mesh.mNumFaces = 3;
 
 	mesh.mFaces = new aiFace[3];
-	mesh.mFaces[0].mIndices = new unsigned int[3];
-	mesh.mFaces[1].mIndices = new unsigned int[3];
-	mesh.mFaces[2].mIndices = new unsigned int[3];
+	mesh.mFaces[0].Initialize(3);
+	mesh.mFaces[1].Initialize(3);
+	mesh.mFaces[2].Initialize(3);
 
 	mesh.mFaces[0].mIndices[0] = 1;
 	mesh.mFaces[0].mIndices[1] = 3;
@@ -92,8 +91,7 @@ TEST_F(VTAdjacencyTest, unreferencedVerticesSet)
 	for (unsigned int i = 0; i < 600;++i)
 	{
 		aiFace& face = mesh.mFaces[i];
-		face.mNumIndices = 3;
-		face.mIndices = new unsigned int[3];
+		face.Initialize(3);
 
 		if (499 == iCurrent)iCurrent = 0;
 		face.mIndices[0] = iCurrent++;

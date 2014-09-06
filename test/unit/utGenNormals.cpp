@@ -26,7 +26,7 @@ void GenNormalsTest::SetUp()
 	pcMesh->mPrimitiveTypes = aiPrimitiveType_TRIANGLE;
 	pcMesh->mNumFaces = 1;
 	pcMesh->mFaces = new aiFace[1];
-	pcMesh->mFaces[0].mIndices = new unsigned int[pcMesh->mFaces[0].mNumIndices = 3];
+	pcMesh->mFaces[0].Initialize(3);
 	pcMesh->mFaces[0].mIndices[0] = 0;
 	pcMesh->mFaces[0].mIndices[1] = 1;
 	pcMesh->mFaces[0].mIndices[2] = 1;

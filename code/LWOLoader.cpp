@@ -339,7 +339,7 @@ void LWOImporter::InternReadFile( const std::string& pFile,
 				unsigned int vert = 0;
 				std::vector<unsigned int>::iterator outIt = smoothingGroups.begin();
 				for (it = sorted.begin(); it != end;++it,++outIt)	{
-					const LWO::Face& face = layer.mFaces[*it];
+					LWO::Face& face = layer.mFaces[*it];
 					*outIt = face.smoothGroup;
 
 					// copy all vertices
@@ -391,9 +391,7 @@ void LWOImporter::InternReadFile( const std::string& pFile,
 
 						face.mIndices[q] = vert;
 					}
-					pf->mIndices = face.mIndices;
-					pf->mNumIndices = face.mNumIndices;
-					unsigned int** p = (unsigned int**)&face.mIndices;*p = NULL; // HACK: make sure it won't be deleted
+					pf->Swap(face);
 					pf++;
 				}
 
@@ -829,11 +827,10 @@ void LWOImporter::CopyFaceIndicesLWO2(FaceList::iterator& it,
 		uint16_t numIndices;
 		::memcpy(&numIndices, cursor++, 2);
 		AI_LSWAP2(numIndices);
-		face.mNumIndices = numIndices & 0x03FF;
-		
+		face.Initialize(numIndices & 0x03FF);
+
 		if(face.mNumIndices) /* byte swapping has already been done */
 		{
-			face.mIndices = new unsigned int[face.mNumIndices];
 			for(unsigned int i = 0; i < face.mNumIndices; i++)
 			{
 				face.mIndices[i] = ReadVSizedIntLWO2((uint8_t*&)cursor) + mCurLayer->mPointIDXOfs;

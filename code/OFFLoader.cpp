@@ -160,12 +160,14 @@ void OFFImporter::InternReadFile( const std::string& pFile,
 			break;
 		}
 		sz = line;SkipSpaces(&sz);
-		if(!(faces->mNumIndices = strtoul10(sz,&sz)) || faces->mNumIndices > 9)
+		unsigned int numIndices = strtoul10(sz,&sz);
+		if(!numIndices || numIndices > 9)
 		{
 			DefaultLogger::get()->error("OFF: Faces with zero indices aren't allowed");
 			--mesh->mNumFaces;
 			continue;
 		}
+		faces->Initialize(numIndices);
 		mesh->mNumVertices += faces->mNumIndices;
 		++faces;
 	}
@@ -187,7 +189,6 @@ void OFFImporter::InternReadFile( const std::string& pFile,
 		if(!(idx = strtoul10(sz,&sz)) || idx > 9)
 			continue;
 
-		faces->mIndices = new unsigned int [faces->mNumIndices];
 		for (unsigned int m = 0; m < faces->mNumIndices;++m)
 		{
 			SkipSpaces(&sz);

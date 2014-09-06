@@ -47,7 +47,7 @@ void JoinVerticesTest::SetUp()
 	for (unsigned int i = 0,p = 0; i < 300;++i)
 	{
 		aiFace& face = pcMesh->mFaces[i];
-		face.mIndices = new unsigned int[ face.mNumIndices = 3 ];
+		face.Initialize(3);
 		for (unsigned int a = 0; a < 3;++a)
 			face.mIndices[a] = p++;
 	}

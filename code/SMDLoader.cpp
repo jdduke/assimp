@@ -313,8 +313,7 @@ void SMDImporter::CreateOutputMeshes()
 		iNum = 0;
 		for (unsigned int iFace = 0; iFace < pcMesh->mNumFaces;++iFace)
 		{
-			pcMesh->mFaces[iFace].mIndices = new unsigned int[3];
-			pcMesh->mFaces[iFace].mNumIndices = 3;
+			pcMesh->mFaces[iFace].Initialize(3);
 
 			// fill the vertices 
 			unsigned int iSrcFace = aaiFaces[i][iFace];
@@ -688,7 +687,7 @@ void SMDImporter::ParseFile()
 	{
 		if(!SkipSpacesAndLineEnd(szCurrent,&szCurrent)) break;
 
-		// "version <n> \n", <n> should be 1 for hl and hl² SMD files
+		// "version <n> \n", <n> should be 1 for hl and hl? SMD files
 		if (TokenMatch(szCurrent,"version",7))
 		{
 			if(!SkipSpaces(szCurrent,&szCurrent)) break;

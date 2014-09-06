@@ -281,7 +281,7 @@ void SplitLargeMeshesProcess_Triangle::SplitMesh(
 				const unsigned int iNumIndices = pMesh->mFaces[iTemp].mNumIndices;
 
 				// setup face type and number of indices
-				pcMesh->mFaces[p].mNumIndices = iNumIndices;
+				pcMesh->mFaces[p].Initialize(iNumIndices);
 				unsigned int* pi = pMesh->mFaces[iTemp].mIndices;
 				unsigned int* piOut = pcMesh->mFaces[p].mIndices;
 

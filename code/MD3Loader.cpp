@@ -966,8 +966,7 @@ void MD3Importer::InternReadFile( const std::string& pFile,
 		// Fill in all triangles
 		unsigned int iCurrent = 0;
 		for (unsigned int i = 0; i < (unsigned int)pcSurfaces->NUM_TRIANGLES;++i)	{
-			pcMesh->mFaces[i].mIndices = new unsigned int[3];
-			pcMesh->mFaces[i].mNumIndices = 3;
+			pcMesh->mFaces[i].Initialize(3);
 
 			//unsigned int iTemp = iCurrent;
 			for (unsigned int c = 0; c < 3;++c,++iCurrent)	{

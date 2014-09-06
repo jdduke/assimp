@@ -511,9 +511,7 @@ void MD5Importer::LoadMD5MeshFile ()
 		mesh->mNumFaces = (unsigned int)meshSrc.mFaces.size();
 		mesh->mFaces = new aiFace[mesh->mNumFaces];
 		for (unsigned int c = 0; c < mesh->mNumFaces;++c)	{
-			mesh->mFaces[c].mNumIndices = 3;
-			mesh->mFaces[c].mIndices = meshSrc.mFaces[c].mIndices;
-			meshSrc.mFaces[c].mIndices = NULL;
+			mesh->mFaces[c].Swap(meshSrc.mFaces[c]);
 		}
 
 		// generate a material for the mesh

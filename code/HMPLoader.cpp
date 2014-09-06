@@ -398,14 +398,12 @@ void HMPImporter::CreateOutputFaceList(unsigned int width,unsigned int height)
 	unsigned int iCurrent = 0;
 	for (unsigned int y = 0; y < height-1;++y)	{
 		for (unsigned int x = 0; x < width-1;++x,++pcFaceOut)	{
-			pcFaceOut->mNumIndices = 4;
-			pcFaceOut->mIndices = new unsigned int[4];
+			pcFaceOut->Initialize(4);
 
 			*pcVertOut++ = pcMesh->mVertices[y*width+x];
 			*pcVertOut++ = pcMesh->mVertices[(y+1)*width+x];
 			*pcVertOut++ = pcMesh->mVertices[(y+1)*width+x+1];
 			*pcVertOut++ = pcMesh->mVertices[y*width+x+1];
-			
 
 			*pcNorOut++ = pcMesh->mNormals[y*width+x];
 			*pcNorOut++ = pcMesh->mNormals[(y+1)*width+x];
@@ -419,7 +417,7 @@ void HMPImporter::CreateOutputFaceList(unsigned int width,unsigned int height)
 				*pcUVOut++ = pcMesh->mTextureCoords[0][(y+1)*width+x+1];
 				*pcUVOut++ = pcMesh->mTextureCoords[0][y*width+x+1];
 			}
-			
+
 			for (unsigned int i = 0; i < 4;++i)
 				pcFaceOut->mIndices[i] = iCurrent++;
 		}

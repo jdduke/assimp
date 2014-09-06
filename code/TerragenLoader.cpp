@@ -240,7 +240,7 @@ void TerragenImporter::InternReadFile( const std::string& pFile,
 					}
 
 					// make indices
-					f->mIndices = new unsigned int[f->mNumIndices = 4];
+					f->Initialize(4);
 					for (unsigned int i = 0; i < 4;++i)
 						f->mIndices[i] = t++;
 				}

@@ -627,8 +627,7 @@ aiMesh *SubMesh::ConvertToAssimpMesh(Mesh *parent)
 	{
 		// Source Ogre face
 		aiFace ogreFace;
-		ogreFace.mNumIndices = 3;
-		ogreFace.mIndices = new unsigned int[3];
+		ogreFace.Initialize(3);
 
 		faces->Seek(fi * fsize, aiOrigin_SET);
 		if (indexData->is32bit)
@@ -647,8 +646,7 @@ aiMesh *SubMesh::ConvertToAssimpMesh(Mesh *parent)
 
 		// Destination Assimp face
 		aiFace &face = dest->mFaces[fi];
-		face.mNumIndices = 3;
-		face.mIndices = new unsigned int[3];
+		face.Initialize(3);
 
 		const size_t pos = fi * 3;
 		for (size_t v=0; v<3; ++v)
@@ -857,8 +855,7 @@ aiMesh *SubMeshXml::ConvertToAssimpMesh(MeshXml *parent)
 
 		// Destination Assimp face
 		aiFace &face = dest->mFaces[fi];
-		face.mNumIndices = 3;
-		face.mIndices = new unsigned int[3];
+		face.Initialize(3);
 
 		const size_t pos = fi * 3;
 		for (size_t v=0; v<3; ++v)

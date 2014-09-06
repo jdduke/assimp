@@ -4,11 +4,6 @@
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
 
-#include <assimp/mesh.h>
-
-using namespace std;
-using namespace Assimp;
-
 class FaceTest : public CPPUNIT_NS :: TestFixture
 {
 	CPPUNIT_TEST_SUITE (FaceTest);

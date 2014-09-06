@@ -44,8 +44,7 @@ void SplitLargeMeshesTest::SetUp()
 	for (unsigned int i = 0; i < pcMesh1->mNumFaces;++i)
 	{
 		aiFace& face = pcMesh1->mFaces[i];
-		face.mNumIndices = 3;
-		face.mIndices = new unsigned int[3];
+		face.Initialize(3);
 		face.mIndices[0] = qq++;
 		face.mIndices[1] = qq++;
 		face.mIndices[2] = qq++;
@@ -64,8 +63,7 @@ void SplitLargeMeshesTest::SetUp()
 	for (unsigned int i = 0; i < pcMesh2->mNumFaces;++i)
 	{
 		aiFace& face = pcMesh2->mFaces[i];
-		face.mNumIndices = 3;
-		face.mIndices = new unsigned int[3];
+		face.Initialize(3);
 		face.mIndices[0] = (unsigned int)((rand() / (float)RAND_MAX) * pcMesh2->mNumVertices);
 		face.mIndices[1] = (unsigned int)((rand() / (float)RAND_MAX) * pcMesh2->mNumVertices);
 		face.mIndices[2] = (unsigned int)((rand() / (float)RAND_MAX) * pcMesh2->mNumVertices);

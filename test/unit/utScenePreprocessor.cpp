@@ -57,7 +57,7 @@ void ScenePreprocessorTest::CheckIfOnly(aiMesh* p, unsigned int num, unsigned in
 {
 	// Triangles only
 	for (unsigned i = 0; i < p->mNumFaces;++i) {
-		p->mFaces[i].mNumIndices = num;
+		p->mFaces[i].Initialize(num);
 	}
 	pp->ProcessMesh(p);
 	EXPECT_EQ(flag, p->mPrimitiveTypes);
@@ -85,13 +85,13 @@ TEST_F(ScenePreprocessorTest, testMeshPreprocessingPos)
 	// Polygons and triangles mixed
 	unsigned i;
 	for (i = 0; i < p->mNumFaces/2;++i)	{
-		p->mFaces[i].mNumIndices = 3;
+		p->mFaces[i].Initialize(3);
 	}
 	for (; i < p->mNumFaces-p->mNumFaces/4;++i)	{
-		p->mFaces[i].mNumIndices = 4;
+		p->mFaces[i].Initialize(4);
 	}
 	for (; i < p->mNumFaces;++i)	{
-		p->mFaces[i].mNumIndices = 10;
+		p->mFaces[i].Initialize(10);
 	}
 	ProcessMesh(p);
 	EXPECT_EQ(static_cast<unsigned int>(aiPrimitiveType_TRIANGLE|aiPrimitiveType_POLYGON),

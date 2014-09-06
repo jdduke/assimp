@@ -10,7 +10,9 @@ build
 # Output
 bin/
 lib/
+libs/
 contrib/
+/objs/
 
 # Generated
 assimp.pc
@@ -32,3 +34,4 @@ test/results
 
 # Python
 __pycache__
+*.pyc

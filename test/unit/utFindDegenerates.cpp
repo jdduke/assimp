@@ -41,11 +41,11 @@ void FindDegeneratesProcessTest::SetUp()
 	unsigned int numOut = 0, numFaces = 0;
 	for (unsigned int i = 0; i < 1000; ++i) {
 		aiFace& f = mesh->mFaces[i];
-	f.mNumIndices = (i % 5)+1; // between 1 and 5
-	f.mIndices = new unsigned int[f.mNumIndices];
-	bool had = false;
-	for (unsigned int n = 0; n < f.mNumIndices;++n) {
-		// FIXME
+		f.Initialize((i % 5)+1); // between 1 and 5
+		bool had = false;
+		for (unsigned int n = 0; n < f.mNumIndices;++n) {
+
+			// FIXME
 #if 0
 		// some duplicate indices
 		if ( n && n == (i / 200)+1) {

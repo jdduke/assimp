@@ -310,7 +310,7 @@ void DXFImporter::ConvertMeshes(aiScene* pScene, DXF::FileData& output)
 			std::vector<unsigned int>::const_iterator it = pl->indices.begin();
 			BOOST_FOREACH(unsigned int facenumv,pl->counts) {
 				aiFace& face = *faces++;
-				face.mIndices = new unsigned int[face.mNumIndices = facenumv];
+				face.Initialize(facenumv);
 
 				for (unsigned int i = 0; i < facenumv; ++i) {
 					face.mIndices[i] = overall_indices++;

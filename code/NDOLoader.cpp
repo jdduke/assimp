@@ -283,8 +283,8 @@ void NDOImporter::InternReadFile( const std::string& pFile,
 					break;
 				}
 			}
-			
-			f.mIndices = new unsigned int[f.mNumIndices = indices.size()];
+
+			f.Initialize(indices.size());
 			std::copy(indices.begin(),indices.end(),f.mIndices);
 		}
 

@@ -464,9 +464,7 @@ aiNode* AC3DImporter::ConvertObjectSection(Object& object,
 			for (unsigned int i = 0; i < mesh->mNumVertices;++i,++faces,++verts)
 			{
 				*verts = object.vertices[i];
-				faces->mNumIndices = 1;
-				faces->mIndices = new unsigned int[1];
-				faces->mIndices[0] = i;
+				faces->Initialize(1, &i);
 			}
 
 			// use the primary material in this case. this should be the
@@ -589,9 +587,9 @@ aiNode* AC3DImporter::ConvertObjectSection(Object& object,
 						if (!type)
 						{
 							aiFace& face = *faces++;
-							if((face.mNumIndices = (unsigned int)src.entries.size()))
+							face.Initialize((unsigned int)src.entries.size());
+							if(face.mNumIndices)
 							{
-								face.mIndices = new unsigned int[face.mNumIndices];
 								for (unsigned int i = 0; i < face.mNumIndices;++i,++vertices)
 								{
 									const Surface::SurfaceEntry& entry = src.entries[i];
@@ -601,7 +599,7 @@ aiNode* AC3DImporter::ConvertObjectSection(Object& object,
 									*vertices = object.vertices[entry.first] + object.translation;
 
 
-									// copy texture coordinates 
+									// copy texture coordinates
 									if (uv)
 									{
 										uv->x =  entry.second.x;
@@ -613,7 +611,6 @@ aiNode* AC3DImporter::ConvertObjectSection(Object& object,
 						}
 						else
 						{
-							
 							it2  = (*it).entries.begin();
 
 							// either a closed or an unclosed line
@@ -623,15 +620,14 @@ aiNode* AC3DImporter::ConvertObjectSection(Object& object,
 							{
 								aiFace& face = *faces++;
 
-								face.mNumIndices = 2;
-								face.mIndices = new unsigned int[2];
+								face.Initialize(2);
 								face.mIndices[0] = cur++;
 								face.mIndices[1] = cur++;
 
 								// copy vertex positions
 								*vertices++ = object.vertices[(*it2).first];
-								
-								// copy texture coordinates 
+
+								// copy texture coordinates
 								if (uv)
 								{
 									uv->x =  (*it2).second.x;

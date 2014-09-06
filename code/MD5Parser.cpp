@@ -315,7 +315,7 @@ MD5MeshParser::MD5MeshParser(SectionList& mSections)
 						desc.mFaces.resize(idx+1);
 
 					aiFace& face = desc.mFaces[idx];	
-					face.mIndices = new unsigned int[face.mNumIndices = 3];
+					face.Initialize(3);
 					for (unsigned int i = 0; i < 3;++i)	{
 						AI_MD5_SKIP_SPACES();
 						face.mIndices[i] = strtoul10(sz,&sz);

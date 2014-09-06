@@ -109,3 +109,4 @@ TEST_F(TriangulateProcessTest, testTriangulation)
 
 	// we should have no valid normal vectors now necause we aren't a pure polygon mesh
 	EXPECT_TRUE(pcMesh->mNormals == NULL);
+}

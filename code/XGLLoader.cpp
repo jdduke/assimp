@@ -548,8 +548,7 @@ aiMesh* XGLImporter::ToOutputMesh(const TempMaterialMesh& m)
 	unsigned int idx = 0;
 	for(unsigned int i = 0; i < mesh->mNumFaces; ++i) {
 		aiFace& f = mesh->mFaces[i];
-		f.mNumIndices = m.vcounts[i];
-		f.mIndices = new unsigned int[f.mNumIndices];
+		f.Initialize(m.vcounts[i]);
 		for(unsigned int c = 0; c < f.mNumIndices; ++c) {
 			f.mIndices[c] = idx++;
 		}

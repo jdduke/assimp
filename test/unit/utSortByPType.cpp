@@ -89,13 +89,12 @@ void SortByPTypeProcessTest::SetUp()
 				}
 				break;
 			}
-			faces->mNumIndices = idx+1;
+			faces->Initialize(idx+1);
 			if (4 == faces->mNumIndices)
 			{
 				if(five)++faces->mNumIndices;
 				five = !five;
 			}
-			faces->mIndices = new unsigned int[faces->mNumIndices];
 			for (unsigned int q = 0; q <faces->mNumIndices;++q,++n)
 			{
 				faces->mIndices[q] = n;

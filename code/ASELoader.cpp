@@ -1001,8 +1001,7 @@ void ASEImporter::ConvertMeshes(ASE::Mesh& mesh, std::vector<aiMesh*>& avOutMesh
 
 						iIndex = aiSplit[p][q];
 
-						p_pcOut->mFaces[q].mIndices = new unsigned int[3];
-						p_pcOut->mFaces[q].mNumIndices = 3;
+						p_pcOut->mFaces[q].Initialize(3);
 
 						for (unsigned int t = 0; t < 3;++t, ++iBase)	{
 							const uint32_t iIndex2 = mesh.mFaces[iIndex].mIndices[t];
@@ -1159,13 +1158,9 @@ void ASEImporter::ConvertMeshes(ASE::Mesh& mesh, std::vector<aiMesh*>& avOutMesh
 
 		// copy faces
 		for (unsigned int iFace = 0; iFace < p_pcOut->mNumFaces;++iFace)	{
-			p_pcOut->mFaces[iFace].mNumIndices = 3;
-			p_pcOut->mFaces[iFace].mIndices = new unsigned int[3];
-
-			// copy indices 
-			p_pcOut->mFaces[iFace].mIndices[0] = mesh.mFaces[iFace].mIndices[0];
-			p_pcOut->mFaces[iFace].mIndices[1] = mesh.mFaces[iFace].mIndices[1];
-			p_pcOut->mFaces[iFace].mIndices[2] = mesh.mFaces[iFace].mIndices[2];
+			p_pcOut->mFaces[iFace].InitializeFace3(mesh.mFaces[iFace].mIndices[0],
+			                                       mesh.mFaces[iFace].mIndices[1],
+			                                       mesh.mFaces[iFace].mIndices[2]);
 		}
 
 		// copy vertex bones

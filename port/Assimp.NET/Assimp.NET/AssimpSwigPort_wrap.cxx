@@ -6258,7 +6258,7 @@ SWIGEXPORT void SWIGSTDCALL CSharp_aiFace_mNumIndices_set(void * jarg1, unsigned
   
   arg1 = (aiFace *)jarg1; 
   arg2 = (unsigned int)jarg2; 
-  if (arg1) (arg1)->mNumIndices = arg2;
+  if (arg1) (arg1)->Initialize(arg2);
 }
 
 

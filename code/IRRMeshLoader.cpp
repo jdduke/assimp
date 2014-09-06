@@ -421,8 +421,7 @@ void IRRMeshImporter::InternReadFile( const std::string& pFile,
 						break;
 					}
 					if (!curIdx)	{
-						curFace->mNumIndices = 3;
-						curFace->mIndices = new unsigned int[3];
+						curFace->Initialize(3);
 					}
 
 					unsigned int idx = strtoul10(sz,&sz);

@@ -296,7 +296,7 @@ void RAWImporter::InternReadFile( const std::string& pFile,
 			while (fc != fcEnd)
 			{
 				aiFace& f = *fc++;
-				f.mIndices = new unsigned int[f.mNumIndices = 3];
+				f.Initialize(3);
 				for (unsigned int m = 0; m < 3;++m)
 					f.mIndices[m] = n++;
 			}
