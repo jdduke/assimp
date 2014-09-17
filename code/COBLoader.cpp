@@ -264,7 +264,7 @@ aiNode* COBImporter::BuildNodes(const Node& root,const Scene& scin,aiScene* fill
 
 						aiFace& fout = outmesh->mFaces[outmesh->mNumFaces++];
 						fout.Initialize((unsigned int)f->indices.size());
-
+						unsigned int foutIndex = 0;
 						for_each(VertexIndex& v, f->indices) {
 							if (v.pos_idx >= ndmesh.vertex_positions.size()) {
 								ThrowException("Position index out of range");
@@ -279,7 +279,7 @@ aiNode* COBImporter::BuildNodes(const Node& root,const Scene& scin,aiScene* fill
 								0.f
 							);
 
-							fout.mIndices[fout.mNumIndices++] = outmesh->mNumVertices++;
+							fout.mIndices[foutIndex++] = outmesh->mNumVertices++;
 						}
 					}
 					outmesh->mMaterialIndex = fill->mNumMaterials;

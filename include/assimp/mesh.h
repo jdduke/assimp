@@ -151,7 +151,8 @@ struct aiFace
 
 	//! Copy constructor. Copy the index array
 	aiFace( const aiFace& o)
-      : mIndices( NULL )
+      : mNumIndices( 0 )
+      , mIndices( NULL )
 	{
 		*this = o;
 	}
@@ -228,7 +229,7 @@ struct aiFace
 		}
 
 		if (IndicesOnHeap()) {
-			// Tranfer this heap array to the other face.
+			// Transfer this heap array to the other face.
 			o.mIndices = mIndices;
 			// Transfer the other local array to this face.
 			std::copy(o.mIndicesStorage, o.mIndicesStorage + o.mNumIndices, mIndicesStorage);
@@ -266,6 +267,7 @@ private:
 			delete [] mIndices;
 		}
 		mIndices = NULL;
+		mNumIndices = 0;
 	}
 #endif // __cplusplus
 }; // struct aiFace
