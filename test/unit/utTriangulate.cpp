@@ -36,13 +36,16 @@ void TriangulateProcessTest::SetUp()
 	{
 		++t;
 		aiFace& face = pcMesh->mFaces[m];
-		face.Initialize(t);
 		if (4 == t)
 		{
 			face.Initialize(q++);
 			t = 0;
 
 			if (10 == q)q = 4;
+		}
+		else
+		{
+			face.Initialize(t);
 		}
 		for (unsigned int p = 0; p < face.mNumIndices; ++p)
 		{

@@ -45,7 +45,7 @@ void FindDegeneratesProcessTest::SetUp()
 		bool had = false;
 		for (unsigned int n = 0; n < f.mNumIndices;++n) {
 
-			// FIXME
+		// FIXME
 #if 0
 		// some duplicate indices
 		if ( n && n == (i / 200)+1) {

@@ -147,8 +147,9 @@ aiMesh* IRRImporter::BuildSingleQuadMesh(const SkyboxVertex& v1,
 	// build the face
 	out->mFaces    = new aiFace[1];
 	aiFace& face   = out->mFaces[0];
-
 	face.InitializeFace4(0, 1, 2, 3);
+
+	out->mNumVertices = 4;
 
 	// copy vertex positions
 	aiVector3D* vec = out->mVertices = new aiVector3D[4];

@@ -275,7 +275,6 @@ void SplitLargeMeshesProcess_Triangle::SplitMesh(
 			unsigned int iCurrent = 0;
 			for (unsigned int p = 0; p < pcMesh->mNumFaces;++p)
 			{
-				pcMesh->mFaces[p].Initialize(3);
 				// allocate a new array
 				const unsigned int iTemp = p + iBase;
 				const unsigned int iNumIndices = pMesh->mFaces[iTemp].mNumIndices;

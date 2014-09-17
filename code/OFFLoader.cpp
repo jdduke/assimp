@@ -163,6 +163,7 @@ void OFFImporter::InternReadFile( const std::string& pFile,
 		unsigned int numIndices = strtoul10(sz,&sz);
 		if(!numIndices || numIndices > 9)
 		{
+			*faces = aiFace();
 			DefaultLogger::get()->error("OFF: Faces with zero indices aren't allowed");
 			--mesh->mNumFaces;
 			continue;
