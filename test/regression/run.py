@@ -54,6 +54,16 @@ import collections
 import settings
 import utils
 
+usage = """run [-i=...] [-e=...]
+
+(lists of file extensions are comma delimited, i.e. `3ds,lwo,x`)
+-i,--include: List of file extensions to test. If omitted,
+         all file extensions are tested except those in `exclude`.
+
+-e,--exclude: Merged with settings.exclude_extensions to produce a
+         list of all file extensions to ignore.
+"""
+
 # -------------------------------------------------------------------------------
 EXPECTED_FAILURE_NOT_MET, DATABASE_LENGTH_MISMATCH, \
 DATABASE_VALUE_MISMATCH, IMPORT_FAILURE, \
@@ -150,18 +160,22 @@ def mkoutputdir_andgetpath(fullpath, myhash, app):
 
 
 # -------------------------------------------------------------------------------
-def process_dir(d, outfile_results, zipin, result):
+def process_dir(d, outfile_results, file_filter, zipin, result):
     shellparams = {'stdout':outfile_results, 'stderr':outfile_results, 'shell':False}
 
     print("Processing directory " + d)
     for f in os.listdir(d):
         fullpath = os.path.join(d, f)
         if os.path.isdir(fullpath) and not f == ".svn":
-            process_dir(fullpath, outfile_results, zipin, result)
+            process_dir(fullpath, outfile_results, file_filter, zipin, result)
             continue
 
         if f in settings.files_to_ignore:
             print("Ignoring " + f)
+            continue
+
+        # todo: Fix for multi dot extensions like .skeleton.xml
+        if not file_filter(fullpath):
             continue
 
         for pppreset in settings.pp_configs_to_test:
@@ -173,13 +187,7 @@ def process_dir(d, outfile_results, zipin, result):
                 if not len(input_expected):
                    failure = True
             except KeyError:
-                #print("Didn't find "+fullpath+" (Hash is "+filehash+") in database")
-                continue
-
-            # Ignore extensions via settings.py configured list
-            # todo: Fix for multi dot extensions like .skeleton.xml
-            ext = os.path.splitext(fullpath)[1].lower()
-            if ext != "" and ext in settings.exclude_extensions:
+                print("Didn't find "+fullpath+" (Hash is "+filehash+") in database")
                 continue
 
             print("-"*60 + "\n  " + os.path.realpath(fullpath) + " pp: " + pppreset) 
@@ -231,14 +239,39 @@ def del_folder_with_contents(folder):
             os.remove(os.path.join(root, name))
         for name in dirs:
             os.rmdir(os.path.join(root, name))
-    
 
 # -------------------------------------------------------------------------------
 def run_test():
     utils.find_assimp_or_die()
+    def clean(f):
+        f = f.strip("* \'")
+        return "."+f if f[:1] != '.' else f
+
+    ext_list = None
+    for m in sys.argv[1:]:
+        if m[:10]=="--exclude=":
+            settings.exclude_extensions += map(clean, m[10:].split(","))
+        elif m[:3]=="-e=":
+            settings.exclude_extensions += map(clean, m[3:].split(","))
+        elif m[:10]=="--include=":
+            ext_list = m[10:].split(",")
+        elif m[:3]=="-i=":
+            ext_list = m[3:].split(",")
+        elif m == "--help" or m == "-h":
+            print(usage)
+            sys.exit(0)
+
+    if ext_list is None:
+        (ext_list, err) = subprocess.Popen([utils.assimp_bin_path, "listext"],
+            stdout=subprocess.PIPE).communicate()
+        ext_list = str(ext_list).lower().split(";")
+    # todo: Fix for multi dot extensions like .skeleton.xml
+    ext_list = list(filter(lambda f: not f in settings.exclude_extensions, map(clean, ext_list)))
+    file_filter = lambda x: os.path.splitext(x)[1].lower() in ext_list
+
     tmp_target_path = os.path.join(settings.results, "tmp")
-    try: 
-        os.mkdir(tmp_target_path) 
+    try:
+        os.mkdir(tmp_target_path)
     except OSError as oerr:
         # clear contents if tmp folder exists already
        del_folder_with_contents(tmp_target_path)
@@ -246,7 +279,6 @@ def run_test():
     try:
         zipin = zipfile.ZipFile(settings.database_name + ".zip",
             "r", zipfile.ZIP_STORED)
-    
     except IOError:
         print("Regression database ", settings.database_name,
               ".zip was not found")
@@ -255,7 +287,7 @@ def run_test():
     res = results(zipin)
     with open(os.path.join(settings.results, outfilename_output), "wt") as outfile:
         for tp in settings.model_directories:
-            process_dir(tp, outfile, zipin, res)
+            process_dir(tp, outfile, file_filter, zipin, res)
 
     res.report_results()
 

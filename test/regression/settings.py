@@ -52,8 +52,10 @@ import os
 #
 # pond.0.ply - loads with 40k identical triangles, causing postprocessing
 # to have quadratic runtime.
+# OutOfMemory.off - loads until memory exhausted, which is sensitive to both
+# platform and device configurations.
 # -------------------------------------------------------------------------------
-files_to_ignore = ["pond.0.ply"]
+files_to_ignore = ["pond.0.ply", "OutOfMemory.off"]
 
 # -------------------------------------------------------------------------------
 # List of file extensions to be excluded from the regression suite
