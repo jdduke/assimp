@@ -46,6 +46,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "./../contrib/OpenGEX/OpenGEX.h"
 
 #include <map>
+#include <memory>
 
 static const aiImporterDesc desc = {
 	"Open Game Engine Exchange",
@@ -62,6 +63,8 @@ static const aiImporterDesc desc = {
 
 using namespace ODDL;
 using namespace OGEX;
+
+using std::auto_ptr;
 
 namespace Assimp {
 namespace OpenGEX {
@@ -230,6 +233,18 @@ void ConvertIndexArray(const IndexArrayStructure& structure, aiFace** pFaceArray
 	}
 }
 
+template <typename T>
+void CloneArray(const T* source, unsigned int count, T** dest) {
+	if (!source || !count) {
+		*dest = NULL;
+		return;
+	}
+
+	*dest = new T[count];
+	// Don't use memcpy as we might need assignment operator semantics (e.g., aiFace);
+	std::copy(source, source + count, *dest);
+}
+
 void GenerateDefaultIndexArray(aiMesh* mesh) {
 	unsigned int stride = 3;
 	switch (mesh->mPrimitiveTypes) {
@@ -385,6 +400,77 @@ void VisitSubnodes(const Structure& structure, Visitor& visitor) {
 	}
 }
 
+struct LightVisitor : public Visitor {
+	explicit LightVisitor(aiLight* light) : light(light) {}
+
+	virtual void Visit(const ColorStructure& color) {
+		if (color.GetAttribString() == "light") {
+			light->mColorDiffuse =
+				aiColor3D(color.GetColor()[0], color.GetColor()[1], color.GetColor()[2]);
+		}
+		// TODO: Handle specular/ambient colors?
+	}
+
+	virtual void Visit(const ParamStructure& param) {
+		if (param.GetAttribString() == "intensity") {
+			light->mAttenuationConstant = param.GetParam();
+		}
+	}
+
+	virtual void Visit(const TextureStructure& texture) {
+		if (texture.GetAttribString() == "projection") {
+
+		}
+	}
+
+	virtual void Visit(const AttenStructure& atten) {
+		const String& attenKind = atten.GetAttenKind();
+		const String& curveType = atten.GetCurveType();
+
+		if (attenKind == "distance") {
+			if ((curveType == "linear") || (curveType == "smooth"))
+			{
+				float beginParam = atten.GetBeginParam();
+				float endParam = atten.GetEndParam();
+
+				// TODO: Process linear or smooth attenuation here.
+			}
+			else if (curveType == "inverse")
+			{
+				float scaleParam = atten.GetScaleParam();
+				float linearParam = atten.GetLinearParam();
+
+				// TODO: Process inverse attenuation here.
+			}
+			else if (curveType == "inverse_square")
+			{
+				float scaleParam = atten.GetScaleParam();
+				float quadraticParam = atten.GetQuadraticParam();
+
+				// TODO: Process inverse square attenuation here.
+			}
+			else
+			{
+				ai_assert(false && "Invalid light curve type");
+			}
+		}
+		else if (attenKind == "angle")
+		{
+			float endParam = atten.GetEndParam();
+
+			// TODO: Process angular attenutation here.
+		}
+		else if (attenKind == "cos_angle")
+		{
+			float endParam = atten.GetEndParam();
+
+		}
+	}
+
+private:
+	aiLight* const light;
+};
+
 struct TransformVisitor : public Visitor {
 	explicit TransformVisitor(aiMatrix4x4* result) : result(result) {}
 
@@ -437,8 +523,42 @@ struct TransformVisitor : public Visitor {
 		*result *= scaling;
 	}
 
+private:
 	aiMatrix4x4* const result;
 };
+
+aiLight* CloneLight(const aiLight& light) {
+	auto_ptr<aiLight> clone(new aiLight());
+	*clone = light;
+	return clone.release();
+}
+
+aiCamera* CloneCamera(const aiCamera& camera) {
+	auto_ptr<aiCamera> clone(new aiCamera());
+	*clone = camera;
+	return clone.release();
+}
+
+aiMesh* CloneMesh(const aiMesh& mesh) {
+	auto_ptr<aiMesh> clone(new aiMesh());
+
+	clone->mPrimitiveTypes = mesh.mPrimitiveTypes;
+	clone->mNumVertices = mesh.mNumVertices;
+	clone->mNumFaces = mesh.mNumFaces;
+	clone->mNumBones = mesh.mNumBones;
+	clone->mMaterialIndex = mesh.mMaterialIndex;
+	clone->mNumAnimMeshes = mesh.mNumAnimMeshes;
+
+	CloneArray(mesh.mVertices, mesh.mNumVertices, &clone->mVertices);
+	CloneArray(mesh.mNormals, mesh.mNumVertices, &clone->mNormals);
+	CloneArray(mesh.mTangents, mesh.mNumVertices, &clone->mTangents);
+	CloneArray(mesh.mBitangents, mesh.mNumVertices, &clone->mBitangents);
+	CloneArray(mesh.mFaces, mesh.mNumFaces , &clone->mFaces);
+	CloneArray(mesh.mBones, mesh.mNumBones, &clone->mBones);
+	CloneArray(mesh.mAnimMeshes, mesh.mNumAnimMeshes, &clone->mAnimMeshes);
+
+	return clone.release();
+}
 
 class OpenGEXConverter : public LogFunctions<OpenGEXConverter> {
 public:
@@ -572,15 +692,32 @@ private:
 	}
 
 	aiLight* ConvertLightObject(const LightObjectStructure& structure) {
-		aiLight* light(new aiLight());
-		// TODO: Implement.
-		return light;
+		auto_ptr<aiLight> light(new aiLight());
+
+		if (structure.GetTypeString() == "infinite") {
+			light->mType = aiLightSource_DIRECTIONAL;
+		} else if (structure.GetTypeString() == "point") {
+			light->mType = aiLightSource_POINT;
+		} else if (structure.GetTypeString() == "spot") {
+			light->mType = aiLightSource_SPOT;
+		} else {
+			ai_assert(false && "Invalid light type");
+		}
+
+		LightVisitor lightVisitor(light.get());
+		VisitSubnodes(structure, lightVisitor);
+
+		return light.release();
 	}
 
 	aiCamera* ConvertCameraObject(const CameraObjectStructure& structure) {
-		aiCamera* camera(new aiCamera());
-		// TODO: Implement.
-		return camera;
+		auto_ptr<aiCamera> camera(new aiCamera());
+		if (structure.GetFocalLength()) {
+			camera->mHorizontalFOV = 2.f * std::atan2(1.f, structure.GetFocalLength());
+		}
+		camera->mClipPlaneNear = structure.GetNearDepth();
+		camera->mClipPlaneFar = structure.GetFarDepth();
+		return camera.release();
 	}
 
 	aiMaterial* ConvertMaterial(const MaterialStructure& structure) {
@@ -594,7 +731,7 @@ private:
 	}
 
 	static aiMaterial* CreateDefaultMaterial() {
-		aiMaterial* material(new aiMaterial());
+		auto_ptr<aiMaterial> material(new aiMaterial());
 
 		aiString s;
 		s.Set(AI_DEFAULT_MATERIAL_NAME);
@@ -605,30 +742,22 @@ private:
 		clrDiffuse = aiColor4D(0.05f, 0.05f, 0.05f, 1.0f);
 		material->AddProperty(&clrDiffuse, 1, AI_MATKEY_COLOR_AMBIENT);
 
-		return material;
+		return material.release();
 	}
 
 	aiNode* ConvertNode(const NodeStructure& structure) {
-		aiNode* node(new aiNode);
-
-		node->mName = structure.GetNodeName();
+		auto_ptr<aiNode> node(new aiNode);
 
 		TransformVisitor transformVisitor(&node->mTransformation);
 		VisitSubnodes(structure, transformVisitor);
 
-		return node;
+		return node.release();
 	}
 
 	aiNode* ConvertBoneNode(const BoneNodeStructure& structure) {
-		aiNode* node = ConvertNode(structure);
+		auto_ptr<aiNode> node(ConvertNode(structure));
 		// TODO: Implement;
-		return node;
-	}
-
-	aiMesh* CloneMesh(const aiMesh& mesh) {
-		aiMesh* clone(new aiMesh());
-		// TODO: Handle multiple mesh references.
-		return clone;
+		return node.release();
 	}
 
 	unsigned int FindOrInsertMeshWithMaterial(const GeometryObjectStructure* geometry, const MaterialStructure* material) {
@@ -664,7 +793,7 @@ private:
 	}
 
 	aiNode* ConvertGeometryNode(const GeometryNodeStructure& structure) {
-		aiNode* node = ConvertNode(structure);
+		auto_ptr<aiNode> node(ConvertNode(structure));
 
 		const GeometryObjectStructure* geometry = structure.GetGeometryObjectStructure();
 		ai_assert(geometry && "Geometry node must contain exactly 1 geometry object");
@@ -687,19 +816,47 @@ private:
 		// TODO: Materials, visibility, shadow, motion blur.
 		// const Array<const MaterialStructure*, 4>& materials = structure.GetMaterialStructureArray();
 
-		return node;
+		return node.release();
 	}
 
 	aiNode* ConvertLightNode(const LightNodeStructure& structure) {
-		aiNode* node = ConvertNode(structure);
-		// TODO: Implement.
-		return node;
+		const auto lightIt = lightMap.find(structure.GetObjectStructure());
+		if (lightIt == lightMap.end())
+			ThrowException("Invalid light reference");
+
+		auto_ptr<aiNode> node(ConvertNode(structure));
+		ai_assert(node->mName.length && "Invalid (empty) light node name");
+
+		// If the light has already been assigned to a node, clone it. Otherwise
+		// assign it to this node.
+		aiLight* light = lights[lightIt->second];
+		if (light->mName.length) {
+			lights.push_back(CloneLight(*light));
+			lights.back()->mName = node->mName;
+		} else {
+			light->mName = node->mName;
+		}
+		return node.release();
 	}
 
 	aiNode* ConvertCameraNode(const CameraNodeStructure& structure) {
-		aiNode* node = ConvertNode(structure);
-		// TODO: Implement.
-		return node;
+		const auto cameraIt = cameraMap.find(structure.GetObjectStructure());
+		if (cameraIt == cameraMap.end())
+			ThrowException("Invalid camera reference");
+
+		auto_ptr<aiNode> node(ConvertNode(structure));
+		ai_assert(node->mName.length && "Invalid (empty) camera node name");
+
+		// If the camera has already been assigned to a node, clone it. Otherwise
+		// assign it to this node.
+		aiCamera* camera = cameras[cameraIt->second];
+		if (camera->mName.length) {
+			cameras.push_back(CloneCamera(*camera));
+			cameras.back()->mName = node->mName;
+		} else {
+			camera->mName = node->mName;
+		}
+		return node.release();
 	}
 
 	unsigned int ConvertPrimitiveType(const String& primitive) {
@@ -714,8 +871,7 @@ private:
 	}
 
 	aiMesh* ConvertMesh(const MeshStructure& structure) {
-		aiMesh* mesh(new aiMesh());
-
+		auto_ptr<aiMesh> mesh(new aiMesh());
 		mesh->mPrimitiveTypes = ConvertPrimitiveType(structure.GetMeshPrimitive());
 
 		const Structure *subStructure = structure.GetFirstSubnode();
@@ -763,16 +919,16 @@ private:
 
 		if (mesh->mFaces) {
 			// Ensure pseudo, "verbose" indexing.
-			if (!MakeVerboseFormatProcess::HasVerboseFormat(mesh))
-				MakeVerboseFormatProcess::MakeVerboseFormat(mesh);
+			if (!MakeVerboseFormatProcess::HasVerboseFormat(mesh.get()))
+				MakeVerboseFormatProcess::MakeVerboseFormat(mesh.get());
 		} else {
 			// Generate a default face indexing if none has been provided.
-			GenerateDefaultIndexArray(mesh);
+			GenerateDefaultIndexArray(mesh.get());
 		}
 
 		// TODO: Handle skin structure.
 
-		return mesh;
+		return mesh.release();
 	}
 
 	// Move all generated meshes, animations, lights, cameras and textures to the output scene.

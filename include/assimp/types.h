@@ -315,6 +315,15 @@ struct aiString
 		return *this;
 	}
 
+	/** Assign an aiString to the string */
+	aiString& operator = (const aiString& rOther) {
+		// Crop the string to the maximum length
+		length = rOther.length>=MAXLEN?MAXLEN-1:rOther.length;
+		memcpy( data, rOther.data, length);
+		data[length] = '\0';
+		return *this;
+	}
+
 	/** Comparison operator */
 	bool operator==(const aiString& other) const {
 		return  (length == other.length && 0 == memcmp(data,other.data,length));

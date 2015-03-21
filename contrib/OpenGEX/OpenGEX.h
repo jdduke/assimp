@@ -505,12 +505,12 @@ namespace OGEX
 
 			const LightObjectStructure		*lightObjectStructure;
 
-			const ObjectStructure *GetObjectStructure(void) const;
-
 		public:
 
 			LightNodeStructure();
 			~LightNodeStructure();
+
+			const ObjectStructure *GetObjectStructure(void) const;
 
 			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
 			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
@@ -524,12 +524,12 @@ namespace OGEX
 
 			const CameraObjectStructure		*cameraObjectStructure;
 
-			const ObjectStructure *GetObjectStructure(void) const;
-
 		public:
 
 			CameraNodeStructure();
 			~CameraNodeStructure();
+
+			const ObjectStructure *GetObjectStructure(void) const;
 
 			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
 			DataResult ProcessData(DataDescription *dataDescription);
