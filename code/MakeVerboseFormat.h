@@ -89,13 +89,15 @@ public:
 	* @param pScene The imported data to work at. */
 	void Execute( aiScene* pScene);
 
-
-private:
+public:
 
 	//! Apply the postprocess step to a given submesh
-	bool MakeVerboseFormat (aiMesh* pcMesh);
+	static bool MakeVerboseFormat (aiMesh* pcMesh);
+
+	//! Whether the given submesh is already in a verbose format.
+	static bool HasVerboseFormat (const aiMesh* pcMesh);
 };
-        
+
 } // end of namespace Assimp
 
-#endif // !!AI_KILLNORMALPROCESS_H_INC
+#endif // !!AI_MAKEVERBOSEFORMAT_H_INC

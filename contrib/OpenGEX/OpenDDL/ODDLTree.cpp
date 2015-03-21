@@ -2,8 +2,8 @@
 	OpenDDL Library Software License
 	==================================
 
-	OpenDDL Library, version 1.0
-	Copyright 2014, Eric Lengyel
+	OpenDDL Library, version 1.1
+	Copyright 2014-2015, Eric Lengyel
 	All rights reserved.
 
 	The OpenDDL Library is free software published on the following website:

@@ -2,8 +2,8 @@
 	OpenGEX Import Template Software License
 	==========================================
 
-	OpenGEX Import Template, version 1.0
-	Copyright 2014, Eric Lengyel
+	OpenGEX Import Template, version 1.1.2
+	Copyright 2014-2015, Eric Lengyel
 	All rights reserved.
 
 	The OpenGEX Import Template is free software published on the following website:
@@ -40,12 +40,51 @@
 	POSSIBILITY OF SUCH DAMAGE.
 */
 
+
+#include <windows.h>
 #include "OpenGEX.h"
+
 
 using namespace OGEX;
 
 
-MetricStructure::MetricStructure() : Structure(kStructureMetric)
+OpenGexStructure::OpenGexStructure(StructureType type) : Structure(type)
+{
+}
+
+OpenGexStructure::~OpenGexStructure()
+{
+}
+
+Structure *OpenGexStructure::GetFirstCoreSubnode(void) const
+{
+	Structure *structure = GetFirstSubnode();
+	while ((structure) && (structure->GetStructureType() == kStructureExtension))
+	{
+		structure = structure->Next();
+	}
+
+	return (structure);
+}
+
+Structure *OpenGexStructure::GetLastCoreSubnode(void) const
+{
+	Structure *structure = GetLastSubnode();
+	while ((structure) && (structure->GetStructureType() == kStructureExtension))
+	{
+		structure = structure->Previous();
+	}
+
+	return (structure);
+}
+
+bool OpenGexStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	return (structure->GetStructureType() == kStructureExtension);
+}
+
+
+MetricStructure::MetricStructure() : OpenGexStructure(kStructureMetric)
 {
 }
 
@@ -67,18 +106,23 @@ bool MetricStructure::ValidateProperty(const DataDescription *dataDescription, c
 
 bool MetricStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetBaseStructureType() == kStructurePrimitive);
+	if (structure->GetBaseStructureType() == kStructurePrimitive)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult MetricStructure::ProcessData(DataDescription *dataDescription)
 {
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
@@ -164,27 +208,488 @@ DataResult MetricStructure::ProcessData(DataDescription *dataDescription)
 }
 
 
-VertexArrayStructure::VertexArrayStructure() : Structure(kStructureVertexArray)
-{
-	morphIndex = 0;
-
-	dataStructure = nullptr;
-}
-
-VertexArrayStructure::~VertexArrayStructure()
+NameStructure::NameStructure() : OpenGexStructure(kStructureName)
 {
 }
 
-bool VertexArrayStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+NameStructure::~NameStructure()
 {
-	if (identifier == "attrib")
+}
+
+bool NameStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if (structure->GetStructureType() == kDataString)
 	{
-		*type = kDataString;
-		*value = &arrayAttrib;
 		return (true);
 	}
 
-	if (identifier == "morph")
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult NameStructure::ProcessData(DataDescription *dataDescription)
+{
+	const Structure *structure = GetFirstCoreSubnode();
+	if (!structure)
+	{
+		return (kDataMissingSubstructure);
+	}
+
+	if (GetLastCoreSubnode() != structure)
+	{
+		return (kDataExtraneousSubstructure);
+	}
+
+	const DataStructure<StringDataType> *dataStructure = static_cast<const DataStructure<StringDataType> *>(structure);
+	if (dataStructure->GetDataElementCount() != 1)
+	{
+		return (kDataInvalidDataFormat);
+	}
+
+	name = dataStructure->GetDataElement(0);
+	return (kDataOkay);
+}
+
+
+ObjectRefStructure::ObjectRefStructure() : OpenGexStructure(kStructureObjectRef)
+{
+	targetStructure = nullptr;
+}
+
+ObjectRefStructure::~ObjectRefStructure()
+{
+}
+
+bool ObjectRefStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if (structure->GetStructureType() == kDataRef)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult ObjectRefStructure::ProcessData(DataDescription *dataDescription)
+{
+	const Structure *structure = GetFirstCoreSubnode();
+	if (!structure)
+	{
+		return (kDataMissingSubstructure);
+	}
+
+	if (GetLastCoreSubnode() != structure)
+	{
+		return (kDataExtraneousSubstructure);
+	}
+
+	const DataStructure<RefDataType> *dataStructure = static_cast<const DataStructure<RefDataType> *>(structure);
+	if (dataStructure->GetDataElementCount() != 0)
+	{
+		Structure *objectStructure = dataDescription->FindStructure(dataStructure->GetDataElement(0));
+		if (objectStructure)
+		{
+			targetStructure = objectStructure;
+			return (kDataOkay);
+		}
+	}
+
+	return (kDataBrokenRef);
+}
+
+
+MaterialRefStructure::MaterialRefStructure() : OpenGexStructure(kStructureMaterialRef)
+{
+	materialIndex = 0;
+	targetStructure = nullptr;
+}
+
+MaterialRefStructure::~MaterialRefStructure()
+{
+}
+
+bool MaterialRefStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "index")
+	{
+		*type = kDataUnsignedInt32;
+		*value = &materialIndex;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool MaterialRefStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if (structure->GetStructureType() == kDataRef)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult MaterialRefStructure::ProcessData(DataDescription *dataDescription)
+{
+	const Structure *structure = GetFirstCoreSubnode();
+	if (!structure)
+	{
+		return (kDataMissingSubstructure);
+	}
+
+	if (GetLastCoreSubnode() != structure)
+	{
+		return (kDataExtraneousSubstructure);
+	}
+
+	const DataStructure<RefDataType> *dataStructure = static_cast<const DataStructure<RefDataType> *>(structure);
+	if (dataStructure->GetDataElementCount() != 0)
+	{
+		const Structure *materialStructure = dataDescription->FindStructure(dataStructure->GetDataElement(0));
+		if (materialStructure)
+		{
+			if (materialStructure->GetStructureType() != kStructureMaterial)
+			{
+				return (kDataOpenGexInvalidMaterialRef);
+			}
+
+			targetStructure = static_cast<const MaterialStructure *>(materialStructure);
+			return (kDataOkay);
+		}
+	}
+
+	return (kDataBrokenRef);
+}
+
+
+AnimatableStructure::AnimatableStructure(StructureType type) : OpenGexStructure(type)
+{
+}
+
+AnimatableStructure::~AnimatableStructure()
+{
+}
+
+
+MatrixStructure::MatrixStructure(StructureType type) : AnimatableStructure(type)
+{
+	SetBaseStructureType(kStructureMatrix);
+
+	objectFlag = false;
+}
+
+MatrixStructure::~MatrixStructure()
+{
+}
+
+bool MatrixStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "object")
+	{
+		*type = kDataBool;
+		*value = &objectFlag;
+		return (true);
+	}
+
+	return (false);
+}
+
+
+TransformStructure::TransformStructure() : MatrixStructure(kStructureTransform)
+{
+}
+
+TransformStructure::~TransformStructure()
+{
+}
+
+bool TransformStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if (structure->GetStructureType() == kDataFloat)
+	{
+		const PrimitiveStructure *primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
+		return (primitiveStructure->GetArraySize() == 16);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult TransformStructure::ProcessData(DataDescription *dataDescription)
+{
+	const Structure *structure = GetFirstCoreSubnode();
+	if (!structure)
+	{
+		return (kDataMissingSubstructure);
+	}
+
+	if (GetLastCoreSubnode() != structure)
+	{
+		return (kDataExtraneousSubstructure);
+	}
+
+	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
+
+	transformCount = dataStructure->GetDataElementCount() / 16;
+	if (transformCount == 0)
+	{
+		return (kDataInvalidDataFormat);
+	}
+
+	transformArray = &dataStructure->GetDataElement(0);
+	return (kDataOkay);
+}
+
+
+TranslationStructure::TranslationStructure() :
+		MatrixStructure(kStructureTranslation),
+		translationKind("xyz"),
+		data(nullptr)
+{
+}
+
+TranslationStructure::~TranslationStructure()
+{
+}
+
+bool TranslationStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "kind")
+	{
+		*type = kDataString;
+		*value = &translationKind;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool TranslationStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if (structure->GetStructureType() == kDataFloat)
+	{
+		const PrimitiveStructure *primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
+		unsigned_int32 arraySize = primitiveStructure->GetArraySize();
+		return ((arraySize == 0) || (arraySize == 3));
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult TranslationStructure::ProcessData(DataDescription *dataDescription)
+{
+	const Structure *structure = GetFirstCoreSubnode();
+	if (!structure)
+	{
+		return (kDataMissingSubstructure);
+	}
+
+	if (GetLastCoreSubnode() != structure)
+	{
+		return (kDataExtraneousSubstructure);
+	}
+
+	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
+	unsigned_int32 arraySize = dataStructure->GetArraySize();
+
+	if ((translationKind == "x") || (translationKind == "y") || (translationKind == "z"))
+	{
+		if ((arraySize != 0) || (dataStructure->GetDataElementCount() != 1))
+		{
+			return (kDataInvalidDataFormat);
+		}
+	}
+	else if (translationKind == "xyz")
+	{
+		if ((arraySize != 3) || (dataStructure->GetDataElementCount() != 3))
+		{
+			return (kDataInvalidDataFormat);
+		}
+	}
+	else
+	{
+		return (kDataOpenGexInvalidTranslationKind);
+	}
+
+	data = &dataStructure->GetDataElement(0);
+
+	// Data is 1 or 3 floats depending on kind.
+	// Build application-specific transform here.
+
+	return (kDataOkay);
+}
+
+
+RotationStructure::RotationStructure() :
+		MatrixStructure(kStructureRotation),
+		rotationKind("axis"),
+		data(nullptr)
+{
+}
+
+RotationStructure::~RotationStructure()
+{
+}
+
+bool RotationStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "kind")
+	{
+		*type = kDataString;
+		*value = &rotationKind;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool RotationStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if (structure->GetStructureType() == kDataFloat)
+	{
+		const PrimitiveStructure *primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
+		unsigned_int32 arraySize = primitiveStructure->GetArraySize();
+		return ((arraySize == 0) || (arraySize == 4));
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult RotationStructure::ProcessData(DataDescription *dataDescription)
+{
+	const Structure *structure = GetFirstCoreSubnode();
+	if (!structure)
+	{
+		return (kDataMissingSubstructure);
+	}
+
+	if (GetLastCoreSubnode() != structure)
+	{
+		return (kDataExtraneousSubstructure);
+	}
+
+	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
+	unsigned_int32 arraySize = dataStructure->GetArraySize();
+
+	if ((rotationKind == "x") || (rotationKind == "y") || (rotationKind == "z"))
+	{
+		if ((arraySize != 0) || (dataStructure->GetDataElementCount() != 1))
+		{
+			return (kDataInvalidDataFormat);
+		}
+	}
+	else if ((rotationKind == "axis") || (rotationKind == "quaternion"))
+	{
+		if ((arraySize != 4) || (dataStructure->GetDataElementCount() != 4))
+		{
+			return (kDataInvalidDataFormat);
+		}
+	}
+	else
+	{
+		return (kDataOpenGexInvalidRotationKind);
+	}
+
+	data = &dataStructure->GetDataElement(0);
+
+	// Data is 1 or 4 floats depending on kind.
+	// Build application-specific transform here.
+
+	return (kDataOkay);
+}
+
+
+ScaleStructure::ScaleStructure() :
+		MatrixStructure(kStructureScale),
+		scaleKind("xyz"),
+		data(nullptr)
+{
+}
+
+ScaleStructure::~ScaleStructure()
+{
+}
+
+bool ScaleStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "kind")
+	{
+		*type = kDataString;
+		*value = &scaleKind;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool ScaleStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if (structure->GetStructureType() == kDataFloat)
+	{
+		const PrimitiveStructure *primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
+		unsigned_int32 arraySize = primitiveStructure->GetArraySize();
+		return ((arraySize == 0) || (arraySize == 3));
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult ScaleStructure::ProcessData(DataDescription *dataDescription)
+{
+	const Structure *structure = GetFirstCoreSubnode();
+	if (!structure)
+	{
+		return (kDataMissingSubstructure);
+	}
+
+	if (GetLastCoreSubnode() != structure)
+	{
+		return (kDataExtraneousSubstructure);
+	}
+
+	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
+	unsigned_int32 arraySize = dataStructure->GetArraySize();
+
+	if ((scaleKind == "x") || (scaleKind == "y") || (scaleKind == "z"))
+	{
+		if ((arraySize != 0) || (dataStructure->GetDataElementCount() != 1))
+		{
+			return (kDataInvalidDataFormat);
+		}
+	}
+	else if (scaleKind == "xyz")
+	{
+		if ((arraySize != 3) || (dataStructure->GetDataElementCount() != 3))
+		{
+			return (kDataInvalidDataFormat);
+		}
+	}
+	else
+	{
+		return (kDataOpenGexInvalidScaleKind);
+	}
+
+	data = &dataStructure->GetDataElement(0);
+
+	// Data is 1 or 3 floats depending on kind.
+	// Build application-specific transform here.
+
+	return (kDataOkay);
+}
+
+
+MorphWeightStructure::MorphWeightStructure() : AnimatableStructure(kStructureMorphWeight)
+{
+	morphIndex = 0;
+	morphWeight = 0.0F;
+}
+
+MorphWeightStructure::~MorphWeightStructure()
+{
+}
+
+bool MorphWeightStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "index")
 	{
 		*type = kDataUnsignedInt32;
 		*value = &morphIndex;
@@ -194,190 +699,53 @@ bool VertexArrayStructure::ValidateProperty(const DataDescription *dataDescripti
 	return (false);
 }
 
-bool VertexArrayStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+bool MorphWeightStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetStructureType() == kDataFloat);
+	if (structure->GetStructureType() == kDataFloat)
+	{
+		const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
+		unsigned_int32 arraySize = dataStructure->GetArraySize();
+		return (arraySize == 0);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
-DataResult VertexArrayStructure::ProcessData(DataDescription *dataDescription)
+DataResult MorphWeightStructure::ProcessData(DataDescription *dataDescription)
 {
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
 
-	dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
-
-	int32 arraySize = dataStructure->GetArraySize();
-	int32 elementCount = dataStructure->GetDataElementCount();
-	int32 vertexCount = elementCount / arraySize;
-	const float *data = &dataStructure->GetDataElement(0);
-
-	// Do something with the vertex data here.
-
-	return (kDataOkay);
-}
-
-
-IndexArrayStructure::IndexArrayStructure() : Structure(kStructureIndexArray)
-{
-	materialIndex = 0;
-	restartIndex = 0;
-	frontFace = "ccw";
-}
-
-IndexArrayStructure::~IndexArrayStructure()
-{
-}
-
-bool IndexArrayStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
-{
-	if (identifier == "material")
+	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
+	if (dataStructure->GetDataElementCount() == 1)
 	{
-		*type = kDataUnsignedInt32;
-		*value = &materialIndex;
-		return (true);
+		morphWeight = dataStructure->GetDataElement(0);
 	}
-
-	if (identifier == "restart")
-	{
-		*type = kDataUnsignedInt64;
-		*value = &restartIndex;
-		return (true);
-	}
-
-	if (identifier == "front")
-	{
-		*type = kDataString;
-		*value = &frontFace;
-		return (true);
-	}
-
-	return (false);
-}
-
-bool IndexArrayStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	StructureType type = structure->GetStructureType();
-	return ((type == kDataUnsignedInt8) || (type == kDataUnsignedInt16) || (type == kDataUnsignedInt32) || (type == kDataUnsignedInt64));
-}
-
-DataResult IndexArrayStructure::ProcessData(DataDescription *dataDescription)
-{
-	const Structure *structure = GetFirstSubnode();
-	if (!structure)
-	{
-		return (kDataMissingSubstructure);
-	}
-
-	if (GetLastSubnode() != structure)
-	{
-		return (kDataExtraneousSubstructure);
-	}
-
-	primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
-	if (primitiveStructure->GetArraySize() != 3)
+	else
 	{
 		return (kDataInvalidDataFormat);
 	}
 
-	// Do something with the index array here.
+	// Do application-specific morph weight processing here.
 
 	return (kDataOkay);
 }
 
 
-MeshStructure::MeshStructure() : Structure(kStructureMesh)
-{
-	meshLevel = 0;
-
-	skinStructure = nullptr;
-}
-
-MeshStructure::~MeshStructure()
-{
-}
-
-bool MeshStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
-{
-	if (identifier == "lod")
-	{
-		*type = kDataUnsignedInt32;
-		*value = &meshLevel;
-		return (true);
-	}
-
-	if (identifier == "primitive")
-	{
-		*type = kDataString;
-		*value = &meshPrimitive;
-		return (true);
-	}
-
-	return (false);
-}
-
-bool MeshStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	StructureType type = structure->GetStructureType();
-	return ((type == kStructureVertexArray) || (type == kStructureIndexArray) || (type == kStructureSkin));
-}
-
-DataResult MeshStructure::ProcessData(DataDescription *dataDescription)
-{
-	DataResult result = Structure::ProcessData(dataDescription);
-	if (result != kDataOkay)
-	{
-		return (result);
-	}
-
-	Structure *structure = GetFirstSubnode();
-	while (structure)
-	{
-		StructureType type = structure->GetStructureType();
-		if (type == kStructureVertexArray)
-		{
-			const VertexArrayStructure *vertexArrayStructure = static_cast<const VertexArrayStructure *>(structure);
-
-			// Process vertex array here.
-		}
-		else if (type == kStructureIndexArray)
-		{
-			IndexArrayStructure *indexArrayStructure = static_cast<IndexArrayStructure *>(structure);
-
-			// Process index array here.
-		}
-		else if (type == kStructureSkin)
-		{
-			if (skinStructure)
-			{
-				return (kDataExtraneousSubstructure);
-			}
-
-			skinStructure = static_cast<SkinStructure *>(structure);
-		}
-
-		structure = structure->Next();
-	}
-
-	// Do application-specific mesh processing here.
-
-	return (kDataOkay);
-}
-
-
-NodeStructure::NodeStructure() : Structure(kStructureNode)
+NodeStructure::NodeStructure() : OpenGexStructure(kStructureNode)
 {
 	SetBaseStructureType(kStructureNode);
 }
 
-NodeStructure::NodeStructure(StructureType type) : Structure(type)
+NodeStructure::NodeStructure(StructureType type) : OpenGexStructure(type)
 {
 	SetBaseStructureType(kStructureNode);
 }
@@ -395,7 +763,12 @@ bool NodeStructure::ValidateSubstructure(const DataDescription *dataDescription,
 	}
 
 	type = structure->GetStructureType();
-	return ((type == kStructureName) || (type == kStructureAnimation));
+	if ((type == kStructureName) || (type == kStructureAnimation))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult NodeStructure::ProcessData(DataDescription *dataDescription)
@@ -488,7 +861,7 @@ bool GeometryNodeStructure::ValidateProperty(const DataDescription *dataDescript
 bool GeometryNodeStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
 	StructureType type = structure->GetStructureType();
-	if ((type == kStructureObjectRef) || (type == kStructureMaterialRef))
+	if ((type == kStructureObjectRef) || (type == kStructureMaterialRef) || (type == kStructureMorphWeight))
 	{
 		return (true);
 	}
@@ -747,829 +1120,146 @@ const ObjectStructure *CameraNodeStructure::GetObjectStructure(void) const
 }
 
 
-ObjectStructure::ObjectStructure(StructureType type) : Structure(type)
+VertexArrayStructure::VertexArrayStructure() : OpenGexStructure(kStructureVertexArray)
 {
-	SetBaseStructureType(kStructureObject);
+	morphIndex = 0;
+	dataStructure = nullptr;
 }
 
-ObjectStructure::~ObjectStructure()
-{
-}
-
-
-GeometryObjectStructure::GeometryObjectStructure() : ObjectStructure(kStructureGeometryObject)
-{
-	visibleFlag = true;
-	shadowFlag = true;
-	motionBlurFlag = true;
-}
-
-GeometryObjectStructure::~GeometryObjectStructure()
-{
-	meshMap.RemoveAll();
-}
-
-bool GeometryObjectStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
-{
-	if (identifier == "visible")
-	{
-		*type = kDataBool;
-		*value = &visibleFlag;
-		return (true);
-	}
-
-	if (identifier == "shadow")
-	{
-		*type = kDataBool;
-		*value = &shadowFlag;
-		return (true);
-	}
-
-	if (identifier == "motion_blur")
-	{
-		*type = kDataBool;
-		*value = &motionBlurFlag;
-		return (true);
-	}
-
-	return (false);
-}
-
-bool GeometryObjectStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	return (structure->GetStructureType() == kStructureMesh);
-}
-
-DataResult GeometryObjectStructure::ProcessData(DataDescription *dataDescription)
-{
-	DataResult result = Structure::ProcessData(dataDescription);
-	if (result != kDataOkay)
-	{
-		return (result);
-	}
-
-	Structure *structure = GetFirstSubnode();
-	if (!structure)
-	{
-		return (kDataMissingSubstructure);
-	}
-
-	int32 levelCount = 0;
-	int32 skinCount = 0;
-
-	do
-	{
-		MeshStructure *meshStructure = static_cast<MeshStructure *>(structure);
-		if (!meshMap.Insert(meshStructure))
-		{
-			return (kDataOpenGexDuplicateLod);
-		}
-
-		levelCount++;
-		skinCount += (meshStructure->GetSkinStructure() != nullptr);
-
-		structure = structure->Next();
-	} while (structure);
-
-	if ((skinCount != 0) && (skinCount != levelCount))
-	{
-		return (kDataOpenGexMissingLodSkin);
-	}
-
-	// Do application-specific object processing here.
-
-	return (kDataOkay);
-}
-
-
-LightObjectStructure::LightObjectStructure() : ObjectStructure(kStructureLightObject)
-{
-	shadowFlag = true;
-}
-
-LightObjectStructure::~LightObjectStructure()
+VertexArrayStructure::~VertexArrayStructure()
 {
 }
 
-bool LightObjectStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+bool VertexArrayStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
 {
-	if (identifier == "type")
+	if (identifier == "attrib")
 	{
 		*type = kDataString;
-		*value = &typeString;
+		*value = &arrayAttrib;
 		return (true);
 	}
 
-	if (identifier == "shadow")
+	if (identifier == "morph")
 	{
-		*type = kDataBool;
-		*value = &shadowFlag;
-		return (true);
-	}
-
-	return (false);
-}
-
-bool LightObjectStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	return ((structure->GetBaseStructureType() == kStructureAttrib) || (structure->GetStructureType() == kStructureAtten));
-}
-
-DataResult LightObjectStructure::ProcessData(DataDescription *dataDescription)
-{
-	DataResult result = Structure::ProcessData(dataDescription);
-	if (result != kDataOkay)
-	{
-		return (result);
-	}
-
-	if (typeString == "infinite")
-	{
-		// Prepare to handle infinite light here.
-	}
-	else if (typeString == "point")
-	{
-		// Prepare to handle point light here.
-	}
-	else if (typeString == "spot")
-	{
-		// Prepare to handle spot light here.
-	}
-	else
-	{
-		return (kDataOpenGexUndefinedLightType);
-	}
-
-	const Structure *structure = GetFirstSubnode();
-	while (structure)
-	{
-		StructureType type = structure->GetStructureType();
-		if (type == kStructureColor)
-		{
-			const ColorStructure *colorStructure = static_cast<const ColorStructure *>(structure);
-			if (colorStructure->GetAttribString() == "light")
-			{
-				// Process light color here.
-			}
-			else
-			{
-				return (kDataOpenGexUndefinedAttrib);
-			}
-		}
-		else if (type == kStructureParam)
-		{
-			const ParamStructure *paramStructure = static_cast<const ParamStructure *>(structure);
-			if (paramStructure->GetAttribString() == "intensity")
-			{
-				// Process light intensity here.
-			}
-			else
-			{
-				return (kDataOpenGexUndefinedAttrib);
-			}
-		}
-		else if (type == kStructureTexture)
-		{
-			const TextureStructure *textureStructure = static_cast<const TextureStructure *>(structure);
-			if (textureStructure->GetAttribString() == "projection")
-			{
-				const char *textureName = textureStructure->GetTextureName();
-
-				// Process light texture here.
-			}
-			else
-			{
-				return (kDataOpenGexUndefinedAttrib);
-			}
-		}
-		else if (type == kStructureAtten)
-		{
-			const AttenStructure *attenStructure = static_cast<const AttenStructure *>(structure);
-			const String& attenKind = attenStructure->GetAttenKind();
-			const String& curveType = attenStructure->GetCurveType();
-
-			if (attenKind == "distance")
-			{
-				if ((curveType == "linear") || (curveType == "smooth"))
-				{
-					float beginParam = attenStructure->GetBeginParam();
-					float endParam = attenStructure->GetEndParam();
-
-					// Process linear or smooth attenuation here.
-				}
-				else if (curveType == "inverse")
-				{
-					float scaleParam = attenStructure->GetScaleParam();
-					float linearParam = attenStructure->GetLinearParam();
-
-					// Process inverse attenuation here.
-				}
-				else if (curveType == "inverse_square")
-				{
-					float scaleParam = attenStructure->GetScaleParam();
-					float quadraticParam = attenStructure->GetQuadraticParam();
-
-					// Process inverse square attenuation here.
-				}
-				else
-				{
-					return (kDataOpenGexUndefinedCurve);
-				}
-			}
-			else if (attenKind == "angle")
-			{
-				float endParam = attenStructure->GetEndParam();
-
-				// Process angular attenutation here.
-			}
-			else if (attenKind == "cos_angle")
-			{
-				float endParam = attenStructure->GetEndParam();
-
-				// Process angular attenutation here.
-			}
-			else
-			{
-				return (kDataOpenGexUndefinedAtten);
-			}
-		}
-
-		structure = structure->Next();
-	}
-
-	// Do application-specific object processing here.
-
-	return (kDataOkay);
-}
-
-
-CameraObjectStructure::CameraObjectStructure() : ObjectStructure(kStructureCameraObject)
-{
-}
-
-CameraObjectStructure::~CameraObjectStructure()
-{
-}
-
-bool CameraObjectStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	return (structure->GetStructureType() == kStructureParam);
-}
-
-DataResult CameraObjectStructure::ProcessData(DataDescription *dataDescription)
-{
-	DataResult result = Structure::ProcessData(dataDescription);
-	if (result != kDataOkay)
-	{
-		return (result);
-	}
-
-	focalLength = 2.0F;
-	nearDepth = 0.1F;
-	farDepth = 1000.0F;
-
-	const OpenGexDataDescription *openGexDataDescription = static_cast<OpenGexDataDescription *>(dataDescription);
-	float distanceScale = openGexDataDescription->GetDistanceScale();
-	float angleScale = openGexDataDescription->GetAngleScale();
-
-	const Structure *structure = GetFirstSubnode();
-	while (structure)
-	{
-		const ParamStructure *paramStructure = static_cast<const ParamStructure *>(structure);
-		const String& attribString = paramStructure->GetAttribString();
-		float param = paramStructure->GetParam();
-
-		if (attribString == "fov")
-		{
-			float t = tanf(param * angleScale * 0.5F);
-			if (t > 0.0F)
-			{
-				focalLength = 1.0F / t;
-			}
-		}
-		else if (attribString == "near")
-		{
-			if (param > 0.0F)
-			{
-				nearDepth = param * distanceScale;
-			}
-		}
-		else if (attribString == "far")
-		{
-			if (param > 0.0F)
-			{
-				farDepth = param * distanceScale;
-			}
-		}
-
-		structure = structure->Next();
-	}
-
-	// Do application-specific object processing here.
-
-	return (kDataOkay);
-}
-
-
-AnimatableStructure::AnimatableStructure(StructureType type) : Structure(type)
-{
-}
-
-AnimatableStructure::~AnimatableStructure()
-{
-}
-
-
-MatrixStructure::MatrixStructure(StructureType type) : AnimatableStructure(type)
-{
-	SetBaseStructureType(kStructureMatrix);
-
-	objectFlag = false;
-}
-
-MatrixStructure::~MatrixStructure()
-{
-}
-
-bool MatrixStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
-{
-	if (identifier == "object")
-	{
-		*type = kDataBool;
-		*value = &objectFlag;
+		*type = kDataUnsignedInt32;
+		*value = &morphIndex;
 		return (true);
 	}
 
 	return (false);
 }
 
-
-TransformStructure::TransformStructure() : MatrixStructure(kStructureTransform)
+bool VertexArrayStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-}
-
-TransformStructure::~TransformStructure()
-{
-}
-
-bool TransformStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	if (structure->GetStructureType() != kDataFloat)
+	if (structure->GetStructureType() == kDataFloat)
 	{
-		return (false);
-	}
-
-	const PrimitiveStructure *primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
-	return (primitiveStructure->GetArraySize() == 16);
-}
-
-DataResult TransformStructure::ProcessData(DataDescription *dataDescription)
-{
-	const Structure *structure = GetFirstSubnode();
-	if (!structure)
-	{
-		return (kDataMissingSubstructure);
-	}
-
-	if (GetLastSubnode() != structure)
-	{
-		return (kDataExtraneousSubstructure);
-	}
-
-	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
-
-	transformCount = dataStructure->GetDataElementCount() / 16;
-	if (transformCount == 0)
-	{
-		return (kDataInvalidDataFormat);
-	}
-
-	transformArray = &dataStructure->GetDataElement(0);
-	return (kDataOkay);
-}
-
-
-TranslationStructure::TranslationStructure() :
-		MatrixStructure(kStructureTranslation),
-		translationKind("xyz"),
-		data(nullptr)
-{
-}
-
-TranslationStructure::~TranslationStructure()
-{
-}
-
-bool TranslationStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
-{
-	if (identifier == "kind")
-	{
-		*type = kDataString;
-		*value = &translationKind;
 		return (true);
 	}
 
-	return (false);
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
-bool TranslationStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+DataResult VertexArrayStructure::ProcessData(DataDescription *dataDescription)
 {
-	if (structure->GetStructureType() != kDataFloat)
-	{
-		return (false);
-	}
-
-	const PrimitiveStructure *primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
-	unsigned_int32 arraySize = primitiveStructure->GetArraySize();
-	return ((arraySize == 0) || (arraySize == 3));
-}
-
-DataResult TranslationStructure::ProcessData(DataDescription *dataDescription)
-{
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
 
-	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
-	unsigned_int32 arraySize = dataStructure->GetArraySize();
+	dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
 
-	if ((translationKind == "x") || (translationKind == "y") || (translationKind == "z"))
-	{
-		if ((arraySize != 0) || (dataStructure->GetDataElementCount() != 1))
-		{
-			return (kDataInvalidDataFormat);
-		}
-	}
-	else if (translationKind == "xyz")
-	{
-		if ((arraySize != 3) || (dataStructure->GetDataElementCount() != 3))
-		{
-			return (kDataInvalidDataFormat);
-		}
-	}
-	else
-	{
-		return (kDataOpenGexInvalidTranslationKind);
-	}
+	int32 arraySize = dataStructure->GetArraySize();
+	int32 elementCount = dataStructure->GetDataElementCount();
+	int32 vertexCount = elementCount / arraySize;
+	const float *data = &dataStructure->GetDataElement(0);
 
-	data = &dataStructure->GetDataElement(0);
-
-	// Data is 1 or 3 floats depending on kind.
-	// Build application-specific transform here.
+	// Do something with the vertex data here.
 
 	return (kDataOkay);
 }
 
 
-RotationStructure::RotationStructure() :
-		MatrixStructure(kStructureRotation),
-		rotationKind("axis"),
-		data(nullptr)
-{
-}
-
-RotationStructure::~RotationStructure()
-{
-}
-
-bool RotationStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
-{
-	if (identifier == "kind")
-	{
-		*type = kDataString;
-		*value = &rotationKind;
-		return (true);
-	}
-
-	return (false);
-}
-
-bool RotationStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	if (structure->GetStructureType() != kDataFloat)
-	{
-		return (false);
-	}
-
-	const PrimitiveStructure *primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
-	unsigned_int32 arraySize = primitiveStructure->GetArraySize();
-	return ((arraySize == 0) || (arraySize == 4));
-}
-
-DataResult RotationStructure::ProcessData(DataDescription *dataDescription)
-{
-	const Structure *structure = GetFirstSubnode();
-	if (!structure)
-	{
-		return (kDataMissingSubstructure);
-	}
-
-	if (GetLastSubnode() != structure)
-	{
-		return (kDataExtraneousSubstructure);
-	}
-
-	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
-	unsigned_int32 arraySize = dataStructure->GetArraySize();
-
-	if ((rotationKind == "x") || (rotationKind == "y") || (rotationKind == "z"))
-	{
-		if ((arraySize != 0) || (dataStructure->GetDataElementCount() != 1))
-		{
-			return (kDataInvalidDataFormat);
-		}
-	}
-	else if ((rotationKind == "axis") || (rotationKind == "quaternion"))
-	{
-		if ((arraySize != 4) || (dataStructure->GetDataElementCount() != 4))
-		{
-			return (kDataInvalidDataFormat);
-		}
-	}
-	else
-	{
-		return (kDataOpenGexInvalidRotationKind);
-	}
-
-	data = &dataStructure->GetDataElement(0);
-
-	// Data is 1 or 4 floats depending on kind.
-	// Build application-specific transform here.
-
-	return (kDataOkay);
-}
-
-
-ScaleStructure::ScaleStructure() :
-		MatrixStructure(kStructureScale),
-		scaleKind("xyz"),
-		data(nullptr)
-{
-}
-
-ScaleStructure::~ScaleStructure()
-{
-}
-
-bool ScaleStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
-{
-	if (identifier == "kind")
-	{
-		*type = kDataString;
-		*value = &scaleKind;
-		return (true);
-	}
-
-	return (false);
-}
-
-bool ScaleStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	if (structure->GetStructureType() != kDataFloat)
-	{
-		return (false);
-	}
-
-	const PrimitiveStructure *primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
-	unsigned_int32 arraySize = primitiveStructure->GetArraySize();
-	return ((arraySize == 0) || (arraySize == 3));
-}
-
-DataResult ScaleStructure::ProcessData(DataDescription *dataDescription)
-{
-	const Structure *structure = GetFirstSubnode();
-	if (!structure)
-	{
-		return (kDataMissingSubstructure);
-	}
-
-	if (GetLastSubnode() != structure)
-	{
-		return (kDataExtraneousSubstructure);
-	}
-
-	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
-	unsigned_int32 arraySize = dataStructure->GetArraySize();
-
-	if ((scaleKind == "x") || (scaleKind == "y") || (scaleKind == "z"))
-	{
-		if ((arraySize != 0) || (dataStructure->GetDataElementCount() != 1))
-		{
-			return (kDataInvalidDataFormat);
-		}
-	}
-	else if (scaleKind == "xyz")
-	{
-		if ((arraySize != 3) || (dataStructure->GetDataElementCount() != 3))
-		{
-			return (kDataInvalidDataFormat);
-		}
-	}
-	else
-	{
-		return (kDataOpenGexInvalidScaleKind);
-	}
-
-	data = &dataStructure->GetDataElement(0);
-
-	// Data is 1 or 3 floats depending on kind.
-	// Build application-specific transform here.
-
-	return (kDataOkay);
-}
-
-
-NameStructure::NameStructure() : Structure(kStructureName)
-{
-}
-
-NameStructure::~NameStructure()
-{
-}
-
-bool NameStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	return (structure->GetStructureType() == kDataString);
-}
-
-DataResult NameStructure::ProcessData(DataDescription *dataDescription)
-{
-	const Structure *structure = GetFirstSubnode();
-	if (!structure)
-	{
-		return (kDataMissingSubstructure);
-	}
-
-	if (GetLastSubnode() != structure)
-	{
-		return (kDataExtraneousSubstructure);
-	}
-
-	const DataStructure<StringDataType> *dataStructure = static_cast<const DataStructure<StringDataType> *>(structure);
-	if (dataStructure->GetDataElementCount() != 1)
-	{
-		return (kDataInvalidDataFormat);
-	}
-
-	name = dataStructure->GetDataElement(0);
-	return (kDataOkay);
-}
-
-
-ObjectRefStructure::ObjectRefStructure() : Structure(kStructureObjectRef)
-{
-	targetStructure = nullptr;
-}
-
-ObjectRefStructure::~ObjectRefStructure()
-{
-}
-
-bool ObjectRefStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	return (structure->GetStructureType() == kDataRef);
-}
-
-DataResult ObjectRefStructure::ProcessData(DataDescription *dataDescription)
-{
-	const Structure *structure = GetFirstSubnode();
-	if (!structure)
-	{
-		return (kDataMissingSubstructure);
-	}
-
-	if (GetLastSubnode() != structure)
-	{
-		return (kDataExtraneousSubstructure);
-	}
-
-	const DataStructure<RefDataType> *dataStructure = static_cast<const DataStructure<RefDataType> *>(structure);
-	if (dataStructure->GetDataElementCount() != 0)
-	{
-		Structure *objectStructure = dataDescription->FindStructure(dataStructure->GetDataElement(0));
-		if (objectStructure)
-		{
-			targetStructure = objectStructure;
-			return (kDataOkay);
-		}
-	}
-
-	return (kDataBrokenRef);
-}
-
-
-MaterialRefStructure::MaterialRefStructure() : Structure(kStructureMaterialRef)
+IndexArrayStructure::IndexArrayStructure() : OpenGexStructure(kStructureIndexArray)
 {
 	materialIndex = 0;
-	targetStructure = nullptr;
+	restartIndex = 0;
+	frontFace = "ccw";
+	primitiveStructure = nullptr;
 }
 
-MaterialRefStructure::~MaterialRefStructure()
+IndexArrayStructure::~IndexArrayStructure()
 {
 }
 
-bool MaterialRefStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+bool IndexArrayStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
 {
-	if (identifier == "index")
+	if (identifier == "material")
 	{
 		*type = kDataUnsignedInt32;
 		*value = &materialIndex;
 		return (true);
 	}
 
+	if (identifier == "restart")
+	{
+		*type = kDataUnsignedInt64;
+		*value = &restartIndex;
+		return (true);
+	}
+
+	if (identifier == "front")
+	{
+		*type = kDataString;
+		*value = &frontFace;
+		return (true);
+	}
+
 	return (false);
 }
 
-bool MaterialRefStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+bool IndexArrayStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetStructureType() == kDataRef);
+	StructureType type = structure->GetStructureType();
+	if ((type == kDataUnsignedInt8) || (type == kDataUnsignedInt16) || (type == kDataUnsignedInt32) || (type == kDataUnsignedInt64))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
-DataResult MaterialRefStructure::ProcessData(DataDescription *dataDescription)
+DataResult IndexArrayStructure::ProcessData(DataDescription *dataDescription)
 {
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
 
-	const DataStructure<RefDataType> *dataStructure = static_cast<const DataStructure<RefDataType> *>(structure);
-	if (dataStructure->GetDataElementCount() != 0)
-	{
-		const Structure *materialStructure = dataDescription->FindStructure(dataStructure->GetDataElement(0));
-		if (materialStructure)
-		{
-			if (materialStructure->GetStructureType() != kStructureMaterial)
-			{
-				return (kDataOpenGexInvalidMaterialRef);
-			}
-
-			targetStructure = static_cast<const MaterialStructure *>(materialStructure);
-			return (kDataOkay);
-		}
-	}
-
-	return (kDataBrokenRef);
-}
-
-
-MorphStructure::MorphStructure() : AnimatableStructure(kStructureMorph)
-{
-	morphWeightArray = nullptr;
-}
-
-MorphStructure::~MorphStructure()
-{
-	delete[] morphWeightArray;
-}
-
-bool MorphStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
-{
-	return (structure->GetStructureType() == kDataFloat);
-}
-
-DataResult MorphStructure::ProcessData(DataDescription *dataDescription)
-{
-	const Structure *structure = GetFirstSubnode();
-	if (!structure)
-	{
-		return (kDataMissingSubstructure);
-	}
-
-	if (GetLastSubnode() != structure)
-	{
-		return (kDataExtraneousSubstructure);
-	}
-
-	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
-	if (dataStructure->GetArraySize() == 0)
+	primitiveStructure = static_cast<const PrimitiveStructure *>(structure);
+	if (primitiveStructure->GetArraySize() != 3)
 	{
 		return (kDataInvalidDataFormat);
 	}
 
-	int32 count = dataStructure->GetDataElementCount();
-	const float *data = &dataStructure->GetDataElement(0);
-
-	// There are count morph targets, and data points to the weights.
-	// Do application-specific processing here.
+	// Do something with the index array here.
 
 	return (kDataOkay);
 }
 
 
-BoneRefArrayStructure::BoneRefArrayStructure() : Structure(kStructureBoneRefArray)
+BoneRefArrayStructure::BoneRefArrayStructure() : OpenGexStructure(kStructureBoneRefArray)
 {
 	boneNodeArray = nullptr;
 }
@@ -1581,18 +1271,23 @@ BoneRefArrayStructure::~BoneRefArrayStructure()
 
 bool BoneRefArrayStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetStructureType() == kDataRef);
+	if (structure->GetStructureType() == kDataRef)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult BoneRefArrayStructure::ProcessData(DataDescription *dataDescription)
 {
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
@@ -1626,7 +1321,7 @@ DataResult BoneRefArrayStructure::ProcessData(DataDescription *dataDescription)
 }
 
 
-BoneCountArrayStructure::BoneCountArrayStructure() : Structure(kStructureBoneCountArray)
+BoneCountArrayStructure::BoneCountArrayStructure() : OpenGexStructure(kStructureBoneCountArray)
 {
 	arrayStorage = nullptr;
 }
@@ -1639,18 +1334,23 @@ BoneCountArrayStructure::~BoneCountArrayStructure()
 bool BoneCountArrayStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
 	StructureType type = structure->GetStructureType();
-	return ((type == kDataUnsignedInt8) || (type == kDataUnsignedInt16) || (type == kDataUnsignedInt32) || (type == kDataUnsignedInt64));
+	if ((type == kDataUnsignedInt8) || (type == kDataUnsignedInt16) || (type == kDataUnsignedInt32) || (type == kDataUnsignedInt64))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult BoneCountArrayStructure::ProcessData(DataDescription *dataDescription)
 {
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
@@ -1729,7 +1429,7 @@ DataResult BoneCountArrayStructure::ProcessData(DataDescription *dataDescription
 }
 
 
-BoneIndexArrayStructure::BoneIndexArrayStructure() : Structure(kStructureBoneIndexArray)
+BoneIndexArrayStructure::BoneIndexArrayStructure() : OpenGexStructure(kStructureBoneIndexArray)
 {
 	arrayStorage = nullptr;
 }
@@ -1742,18 +1442,23 @@ BoneIndexArrayStructure::~BoneIndexArrayStructure()
 bool BoneIndexArrayStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
 	StructureType type = structure->GetStructureType();
-	return ((type == kDataUnsignedInt8) || (type == kDataUnsignedInt16) || (type == kDataUnsignedInt32) || (type == kDataUnsignedInt64));
+	if ((type == kDataUnsignedInt8) || (type == kDataUnsignedInt16) || (type == kDataUnsignedInt32) || (type == kDataUnsignedInt64))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult BoneIndexArrayStructure::ProcessData(DataDescription *dataDescription)
 {
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
@@ -1832,7 +1537,7 @@ DataResult BoneIndexArrayStructure::ProcessData(DataDescription *dataDescription
 }
 
 
-BoneWeightArrayStructure::BoneWeightArrayStructure() : Structure(kStructureBoneWeightArray)
+BoneWeightArrayStructure::BoneWeightArrayStructure() : OpenGexStructure(kStructureBoneWeightArray)
 {
 }
 
@@ -1842,18 +1547,23 @@ BoneWeightArrayStructure::~BoneWeightArrayStructure()
 
 bool BoneWeightArrayStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetStructureType() == kDataFloat);
+	if (structure->GetStructureType() == kDataFloat)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult BoneWeightArrayStructure::ProcessData(DataDescription *dataDescription)
 {
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
@@ -1870,7 +1580,7 @@ DataResult BoneWeightArrayStructure::ProcessData(DataDescription *dataDescriptio
 }
 
 
-SkeletonStructure::SkeletonStructure() : Structure(kStructureSkeleton)
+SkeletonStructure::SkeletonStructure() : OpenGexStructure(kStructureSkeleton)
 {
 }
 
@@ -1881,7 +1591,12 @@ SkeletonStructure::~SkeletonStructure()
 bool SkeletonStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
 	StructureType type = structure->GetStructureType();
-	return ((type == kStructureBoneRefArray) || (type == kStructureTransform));
+	if ((type == kStructureBoneRefArray) || (type == kStructureTransform))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult SkeletonStructure::ProcessData(DataDescription *dataDescription)
@@ -1927,7 +1642,7 @@ DataResult SkeletonStructure::ProcessData(DataDescription *dataDescription)
 }
 
 
-SkinStructure::SkinStructure() : Structure(kStructureSkin)
+SkinStructure::SkinStructure() : OpenGexStructure(kStructureSkin)
 {
 }
 
@@ -1938,7 +1653,12 @@ SkinStructure::~SkinStructure()
 bool SkinStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
 	StructureType type = structure->GetStructureType();
-	return ((type == kStructureTransform) || (type == kStructureSkeleton) || (type == kStructureBoneCountArray) || (type == kStructureBoneIndexArray) || (type == kStructureBoneWeightArray));
+	if ((type == kStructureTransform) || (type == kStructureSkeleton) || (type == kStructureBoneCountArray) || (type == kStructureBoneIndexArray) || (type == kStructureBoneWeightArray))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult SkinStructure::ProcessData(DataDescription *dataDescription)
@@ -2039,34 +1759,120 @@ DataResult SkinStructure::ProcessData(DataDescription *dataDescription)
 }
 
 
-MaterialStructure::MaterialStructure() : Structure(kStructureMaterial)
+MorphStructure::MorphStructure() : OpenGexStructure(kStructureMorph)
 {
-	twoSidedFlag = false;
-	materialName = nullptr;
+	// The value of baseFlag indicates whether the base property was actually
+	// specified for the structure.
+
+	morphIndex = 0;
+	baseFlag = false;
 }
 
-MaterialStructure::~MaterialStructure()
+MorphStructure::~MorphStructure()
 {
 }
 
-bool MaterialStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+bool MorphStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
 {
-	if (identifier == "two_sided")
+	if (identifier == "index")
 	{
-		*type = kDataBool;
-		*value = &twoSidedFlag;
+		*type = kDataUnsignedInt32;
+		*value = &morphIndex;
+		return (true);
+	}
+
+	if (identifier == "base")
+	{
+		*type = kDataUnsignedInt32;
+		*value = &baseIndex;
+		baseFlag = true;
 		return (true);
 	}
 
 	return (false);
 }
 
-bool MaterialStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+bool MorphStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return ((structure->GetBaseStructureType() == kStructureAttrib) || (structure->GetStructureType() == kStructureName));
+	if (structure->GetStructureType() == kStructureName)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
-DataResult MaterialStructure::ProcessData(DataDescription *dataDescription)
+DataResult MorphStructure::ProcessData(DataDescription *dataDescription)
+{
+	DataResult result = OpenGexStructure::ProcessData(dataDescription);
+	if (result != kDataOkay)
+	{
+		return (result);
+	}
+
+	morphName = nullptr;
+
+	const Structure *structure = GetFirstCoreSubnode();
+	if (!structure)
+	{
+		return (kDataMissingSubstructure);
+	}
+
+	if (GetLastCoreSubnode() != structure)
+	{
+		return (kDataExtraneousSubstructure);
+	}
+
+	morphName = static_cast<const NameStructure *>(structure)->GetName();
+
+	// Do application-specific morph processing here.
+
+	return (kDataOkay);
+}
+
+
+MeshStructure::MeshStructure() : OpenGexStructure(kStructureMesh)
+{
+	meshLevel = 0;
+
+	skinStructure = nullptr;
+}
+
+MeshStructure::~MeshStructure()
+{
+}
+
+bool MeshStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "lod")
+	{
+		*type = kDataUnsignedInt32;
+		*value = &meshLevel;
+		return (true);
+	}
+
+	if (identifier == "primitive")
+	{
+		*type = kDataString;
+		*value = &meshPrimitive;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool MeshStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	StructureType type = structure->GetStructureType();
+	if ((type == kStructureVertexArray) || (type == kStructureIndexArray) || (type == kStructureSkin))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult MeshStructure::ProcessData(DataDescription *dataDescription)
 {
 	DataResult result = Structure::ProcessData(dataDescription);
 	if (result != kDataOkay)
@@ -2074,22 +1880,385 @@ DataResult MaterialStructure::ProcessData(DataDescription *dataDescription)
 		return (result);
 	}
 
-	const Structure *structure = GetFirstSubstructure(kStructureName);
-	if (structure)
+	Structure *structure = GetFirstSubnode();
+	while (structure)
 	{
-		if (GetLastSubstructure(kStructureName) != structure)
+		StructureType type = structure->GetStructureType();
+		if (type == kStructureVertexArray)
 		{
-			return (kDataExtraneousSubstructure);
+			const VertexArrayStructure *vertexArrayStructure = static_cast<const VertexArrayStructure *>(structure);
+
+			// Process vertex array here.
 		}
+		else if (type == kStructureIndexArray)
+		{
+			IndexArrayStructure *indexArrayStructure = static_cast<IndexArrayStructure *>(structure);
+
+			// Process index array here.
+		}
+		else if (type == kStructureSkin)
+		{
+			if (skinStructure)
+			{
+				return (kDataExtraneousSubstructure);
+			}
+
+			skinStructure = static_cast<SkinStructure *>(structure);
+		}
+
+		structure = structure->Next();
 	}
 
-	// Do application-specific material processing here.
+	// Do application-specific mesh processing here.
 
 	return (kDataOkay);
 }
 
 
-AttribStructure::AttribStructure(StructureType type) : Structure(type)
+ObjectStructure::ObjectStructure(StructureType type) : OpenGexStructure(type)
+{
+	SetBaseStructureType(kStructureObject);
+}
+
+ObjectStructure::~ObjectStructure()
+{
+}
+
+
+GeometryObjectStructure::GeometryObjectStructure() : ObjectStructure(kStructureGeometryObject)
+{
+	visibleFlag = true;
+	shadowFlag = true;
+	motionBlurFlag = true;
+}
+
+GeometryObjectStructure::~GeometryObjectStructure()
+{
+	meshMap.RemoveAll();
+}
+
+bool GeometryObjectStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "visible")
+	{
+		*type = kDataBool;
+		*value = &visibleFlag;
+		return (true);
+	}
+
+	if (identifier == "shadow")
+	{
+		*type = kDataBool;
+		*value = &shadowFlag;
+		return (true);
+	}
+
+	if (identifier == "motion_blur")
+	{
+		*type = kDataBool;
+		*value = &motionBlurFlag;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool GeometryObjectStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	StructureType type = structure->GetStructureType();
+	if ((type == kStructureMesh) || (type == kStructureMorph))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult GeometryObjectStructure::ProcessData(DataDescription *dataDescription)
+{
+	DataResult result = Structure::ProcessData(dataDescription);
+	if (result != kDataOkay)
+	{
+		return (result);
+	}
+
+	int32 meshCount = 0;
+	int32 skinCount = 0;
+
+	Structure *structure = GetFirstCoreSubnode();
+	while (structure)
+	{
+		StructureType type = structure->GetStructureType();
+		if (type == kStructureMesh)
+		{
+			MeshStructure *meshStructure = static_cast<MeshStructure *>(structure);
+			if (!meshMap.Insert(meshStructure))
+			{
+				return (kDataOpenGexDuplicateLod);
+			}
+
+			meshCount++;
+			skinCount += (meshStructure->GetSkinStructure() != nullptr);
+		}
+		else if (type == kStructureMorph)
+		{
+			MorphStructure *morphStructure = static_cast<MorphStructure *>(structure);
+			if (!morphMap.Insert(morphStructure))
+			{
+				return (kDataOpenGexDuplicateMorph);
+			}
+		}
+
+		structure = structure->Next();
+	}
+
+	if (meshCount == 0)
+	{
+		return (kDataMissingSubstructure);
+	}
+
+	if ((skinCount != 0) && (skinCount != meshCount))
+	{
+		return (kDataOpenGexMissingLodSkin);
+	}
+
+	// Do application-specific object processing here.
+
+	return (kDataOkay);
+}
+
+
+LightObjectStructure::LightObjectStructure() : ObjectStructure(kStructureLightObject)
+{
+	shadowFlag = true;
+}
+
+LightObjectStructure::~LightObjectStructure()
+{
+}
+
+bool LightObjectStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "type")
+	{
+		*type = kDataString;
+		*value = &typeString;
+		return (true);
+	}
+
+	if (identifier == "shadow")
+	{
+		*type = kDataBool;
+		*value = &shadowFlag;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool LightObjectStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if ((structure->GetBaseStructureType() == kStructureAttrib) || (structure->GetStructureType() == kStructureAtten))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult LightObjectStructure::ProcessData(DataDescription *dataDescription)
+{
+	DataResult result = Structure::ProcessData(dataDescription);
+	if (result != kDataOkay)
+	{
+		return (result);
+	}
+
+	if (typeString == "infinite")
+	{
+		// Prepare to handle infinite light here.
+	}
+	else if (typeString == "point")
+	{
+		// Prepare to handle point light here.
+	}
+	else if (typeString == "spot")
+	{
+		// Prepare to handle spot light here.
+	}
+	else
+	{
+		return (kDataOpenGexUndefinedLightType);
+	}
+
+	const Structure *structure = GetFirstSubnode();
+	while (structure)
+	{
+		StructureType type = structure->GetStructureType();
+		if (type == kStructureColor)
+		{
+			const ColorStructure *colorStructure = static_cast<const ColorStructure *>(structure);
+			if (colorStructure->GetAttribString() == "light")
+			{
+				// Process light color here.
+			}
+		}
+		else if (type == kStructureParam)
+		{
+			const ParamStructure *paramStructure = static_cast<const ParamStructure *>(structure);
+			if (paramStructure->GetAttribString() == "intensity")
+			{
+				// Process light intensity here.
+			}
+		}
+		else if (type == kStructureTexture)
+		{
+			const TextureStructure *textureStructure = static_cast<const TextureStructure *>(structure);
+			if (textureStructure->GetAttribString() == "projection")
+			{
+				const char *textureName = textureStructure->GetTextureName();
+
+				// Process light texture here.
+			}
+		}
+		else if (type == kStructureAtten)
+		{
+			const AttenStructure *attenStructure = static_cast<const AttenStructure *>(structure);
+			const String& attenKind = attenStructure->GetAttenKind();
+			const String& curveType = attenStructure->GetCurveType();
+
+			if (attenKind == "distance")
+			{
+				if ((curveType == "linear") || (curveType == "smooth"))
+				{
+					float beginParam = attenStructure->GetBeginParam();
+					float endParam = attenStructure->GetEndParam();
+
+					// Process linear or smooth attenuation here.
+				}
+				else if (curveType == "inverse")
+				{
+					float scaleParam = attenStructure->GetScaleParam();
+					float linearParam = attenStructure->GetLinearParam();
+
+					// Process inverse attenuation here.
+				}
+				else if (curveType == "inverse_square")
+				{
+					float scaleParam = attenStructure->GetScaleParam();
+					float quadraticParam = attenStructure->GetQuadraticParam();
+
+					// Process inverse square attenuation here.
+				}
+				else
+				{
+					return (kDataOpenGexUndefinedCurve);
+				}
+			}
+			else if (attenKind == "angle")
+			{
+				float endParam = attenStructure->GetEndParam();
+
+				// Process angular attenutation here.
+			}
+			else if (attenKind == "cos_angle")
+			{
+				float endParam = attenStructure->GetEndParam();
+
+				// Process angular attenutation here.
+			}
+			else
+			{
+				return (kDataOpenGexUndefinedAtten);
+			}
+		}
+
+		structure = structure->Next();
+	}
+
+	// Do application-specific object processing here.
+
+	return (kDataOkay);
+}
+
+
+CameraObjectStructure::CameraObjectStructure() : ObjectStructure(kStructureCameraObject)
+{
+}
+
+CameraObjectStructure::~CameraObjectStructure()
+{
+}
+
+bool CameraObjectStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if (structure->GetStructureType() == kStructureParam)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult CameraObjectStructure::ProcessData(DataDescription *dataDescription)
+{
+	DataResult result = Structure::ProcessData(dataDescription);
+	if (result != kDataOkay)
+	{
+		return (result);
+	}
+
+	focalLength = 2.0F;
+	nearDepth = 0.1F;
+	farDepth = 1000.0F;
+
+	const OpenGexDataDescription *openGexDataDescription = static_cast<OpenGexDataDescription *>(dataDescription);
+	float distanceScale = openGexDataDescription->GetDistanceScale();
+	float angleScale = openGexDataDescription->GetAngleScale();
+
+	const Structure *structure = GetFirstSubnode();
+	while (structure)
+	{
+		if (structure->GetStructureType() == kStructureParam)
+		{
+			const ParamStructure *paramStructure = static_cast<const ParamStructure *>(structure);
+			const String& attribString = paramStructure->GetAttribString();
+			float param = paramStructure->GetParam();
+
+			if (attribString == "fov")
+			{
+				float t = tanf(param * angleScale * 0.5F);
+				if (t > 0.0F)
+				{
+					focalLength = 1.0F / t;
+				}
+			}
+			else if (attribString == "near")
+			{
+				if (param > 0.0F)
+				{
+					nearDepth = param * distanceScale;
+				}
+			}
+			else if (attribString == "far")
+			{
+				if (param > 0.0F)
+				{
+					farDepth = param * distanceScale;
+				}
+			}
+		}
+
+		structure = structure->Next();
+	}
+
+	// Do application-specific object processing here.
+
+	return (kDataOkay);
+}
+
+
+AttribStructure::AttribStructure(StructureType type) : OpenGexStructure(type)
 {
 	SetBaseStructureType(kStructureAttrib);
 }
@@ -2128,18 +2297,18 @@ bool ParamStructure::ValidateSubstructure(const DataDescription *dataDescription
 		return (arraySize == 0);
 	}
 
-	return (false);
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult ParamStructure::ProcessData(DataDescription *dataDescription)
 {
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
@@ -2175,18 +2344,18 @@ bool ColorStructure::ValidateSubstructure(const DataDescription *dataDescription
 		return ((arraySize >= 3) && (arraySize <= 4));
 	}
 
-	return (false);
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult ColorStructure::ProcessData(DataDescription *dataDescription)
 {
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
@@ -2243,7 +2412,12 @@ bool TextureStructure::ValidateProperty(const DataDescription *dataDescription, 
 bool TextureStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
 	StructureType type = structure->GetStructureType();
-	return ((type == kDataString) || (type == kStructureAnimation) || (structure->GetBaseStructureType() == kStructureMatrix));
+	if ((type == kDataString) || (type == kStructureAnimation) || (structure->GetBaseStructureType() == kStructureMatrix))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult TextureStructure::ProcessData(DataDescription *dataDescription)
@@ -2259,9 +2433,7 @@ DataResult TextureStructure::ProcessData(DataDescription *dataDescription)
 	const Structure *structure = GetFirstSubnode();
 	while (structure)
 	{
-		StructureType type = structure->GetStructureType();
-
-		if (type == kDataString)
+		if (structure->GetStructureType() == kDataString)
 		{
 			if (!nameFlag)
 			{
@@ -2282,7 +2454,7 @@ DataResult TextureStructure::ProcessData(DataDescription *dataDescription)
 				return (kDataExtraneousSubstructure);
 			}
 		}
-		else if (type != kStructureAnimation)
+		else if (structure->GetBaseStructureType() == kStructureMatrix)
 		{
 			const MatrixStructure *matrixStructure = static_cast<const MatrixStructure *>(structure);
 
@@ -2302,7 +2474,7 @@ DataResult TextureStructure::ProcessData(DataDescription *dataDescription)
 
 
 AttenStructure::AttenStructure() :
-		Structure(kStructureAtten),
+		OpenGexStructure(kStructureAtten),
 		attenKind("distance"),
 		curveType("linear")
 {
@@ -2344,7 +2516,12 @@ bool AttenStructure::ValidateProperty(const DataDescription *dataDescription, co
 
 bool AttenStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetStructureType() == kStructureParam);
+	if (structure->GetStructureType() == kStructureParam)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult AttenStructure::ProcessData(DataDescription *dataDescription)
@@ -2367,71 +2544,70 @@ DataResult AttenStructure::ProcessData(DataDescription *dataDescription)
 	const Structure *structure = GetFirstSubnode();
 	while (structure)
 	{
-		const ParamStructure *paramStructure = static_cast<const ParamStructure *>(structure);
-		const String& attribString = paramStructure->GetAttribString();
+		if (structure->GetStructureType() == kStructureParam)
+		{
+			const ParamStructure *paramStructure = static_cast<const ParamStructure *>(structure);
+			const String& attribString = paramStructure->GetAttribString();
 
-		if (attribString == "begin")
-		{
-			beginParam = paramStructure->GetParam();
+			if (attribString == "begin")
+			{
+				beginParam = paramStructure->GetParam();
 
-			if (attenKind == "distance")
-			{
-				beginParam *= distanceScale;
+				if (attenKind == "distance")
+				{
+					beginParam *= distanceScale;
+				}
+				else if (attenKind == "angle")
+				{
+					beginParam *= angleScale;
+				}
 			}
-			else if (attenKind == "angle")
+			else if (attribString == "end")
 			{
-				beginParam *= angleScale;
-			}
-		}
-		else if (attribString == "end")
-		{
-			endParam = paramStructure->GetParam();
+				endParam = paramStructure->GetParam();
 
-			if (attenKind == "distance")
-			{
-				endParam *= distanceScale;
+				if (attenKind == "distance")
+				{
+					endParam *= distanceScale;
+				}
+				else if (attenKind == "angle")
+				{
+					endParam *= angleScale;
+				}
 			}
-			else if (attenKind == "angle")
+			else if (attribString == "scale")
 			{
-				endParam *= angleScale;
-			}
-		}
-		else if (attribString == "scale")
-		{
-			scaleParam = paramStructure->GetParam();
+				scaleParam = paramStructure->GetParam();
 
-			if (attenKind == "distance")
-			{
-				scaleParam *= distanceScale;
+				if (attenKind == "distance")
+				{
+					scaleParam *= distanceScale;
+				}
+				else if (attenKind == "angle")
+				{
+					scaleParam *= angleScale;
+				}
 			}
-			else if (attenKind == "angle")
+			else if (attribString == "offset")
 			{
-				scaleParam *= angleScale;
+				offsetParam = paramStructure->GetParam();
 			}
-		}
-		else if (attribString == "offset")
-		{
-			offsetParam = paramStructure->GetParam();
-		}
-		else if (attribString == "constant")
-		{
-			constantParam = paramStructure->GetParam();
-		}
-		else if (attribString == "linear")
-		{
-			linearParam = paramStructure->GetParam();
-		}
-		else if (attribString == "quadratic")
-		{
-			quadraticParam = paramStructure->GetParam();
-		}
-		else if (attribString == "power")
-		{
-			powerParam = paramStructure->GetParam();
-		}
-		else
-		{
-			return (kDataOpenGexUndefinedAttrib);
+			else if (attribString == "constant")
+			{
+				constantParam = paramStructure->GetParam();
+			}
+			else if (attribString == "linear")
+			{
+				linearParam = paramStructure->GetParam();
+			}
+			else if (attribString == "quadratic")
+			{
+				quadraticParam = paramStructure->GetParam();
+			}
+			else if (attribString == "power")
+			{
+				powerParam = paramStructure->GetParam();
+			}
 		}
 
 		structure = structure->Next();
@@ -2441,8 +2617,63 @@ DataResult AttenStructure::ProcessData(DataDescription *dataDescription)
 }
 
 
+MaterialStructure::MaterialStructure() : OpenGexStructure(kStructureMaterial)
+{
+	twoSidedFlag = false;
+	materialName = nullptr;
+}
+
+MaterialStructure::~MaterialStructure()
+{
+}
+
+bool MaterialStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "two_sided")
+	{
+		*type = kDataBool;
+		*value = &twoSidedFlag;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool MaterialStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	if ((structure->GetBaseStructureType() == kStructureAttrib) || (structure->GetStructureType() == kStructureName))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult MaterialStructure::ProcessData(DataDescription *dataDescription)
+{
+	DataResult result = Structure::ProcessData(dataDescription);
+	if (result != kDataOkay)
+	{
+		return (result);
+	}
+
+	const Structure *structure = GetFirstSubstructure(kStructureName);
+	if (structure)
+	{
+		if (GetLastSubstructure(kStructureName) != structure)
+		{
+			return (kDataExtraneousSubstructure);
+		}
+	}
+
+	// Do application-specific material processing here.
+
+	return (kDataOkay);
+}
+
+
 KeyStructure::KeyStructure() :
-		Structure(kStructureKey),
+		OpenGexStructure(kStructureKey),
 		keyKind("value")
 {
 }
@@ -2465,7 +2696,12 @@ bool KeyStructure::ValidateProperty(const DataDescription *dataDescription, cons
 
 bool KeyStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetStructureType() == kDataFloat);
+	if (structure->GetStructureType() == kDataFloat)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult KeyStructure::ProcessData(DataDescription *dataDescription)
@@ -2476,13 +2712,13 @@ DataResult KeyStructure::ProcessData(DataDescription *dataDescription)
 		return (result);
 	}
 
-	const Structure *structure = GetFirstSubnode();
+	const Structure *structure = GetFirstCoreSubnode();
 	if (!structure)
 	{
 		return (kDataMissingSubstructure);
 	}
 
-	if (GetLastSubnode() != structure)
+	if (GetLastCoreSubnode() != structure)
 	{
 		return (kDataExtraneousSubstructure);
 	}
@@ -2516,7 +2752,7 @@ DataResult KeyStructure::ProcessData(DataDescription *dataDescription)
 
 
 CurveStructure::CurveStructure(StructureType type) :
-		Structure(type),
+		OpenGexStructure(type),
 		curveType("linear")
 {
 	SetBaseStructureType(kStructureCurve);
@@ -2540,7 +2776,12 @@ bool CurveStructure::ValidateProperty(const DataDescription *dataDescription, co
 
 bool CurveStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetStructureType() == kStructureKey);
+	if (structure->GetStructureType() == kStructureKey)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult CurveStructure::ProcessData(DataDescription *dataDescription)
@@ -2561,98 +2802,101 @@ DataResult CurveStructure::ProcessData(DataDescription *dataDescription)
 	const Structure *structure = GetFirstSubnode();
 	while (structure)
 	{
-		const KeyStructure *keyStructure = static_cast<const KeyStructure *>(structure);
-		const String& keyKind = keyStructure->GetKeyKind();
-
-		if (keyKind == "value")
+		if (structure->GetStructureType() == kStructureKey)
 		{
-			if (!keyValueStructure)
-			{
-				keyValueStructure = keyStructure;
-			}
-			else
-			{
-				return (kDataExtraneousSubstructure);
-			}
-		}
-		else if (keyKind == "-control")
-		{
-			if (curveType != "bezier")
-			{
-				return (kDataOpenGexInvalidKeyKind);
-			}
+			const KeyStructure *keyStructure = static_cast<const KeyStructure *>(structure);
+			const String& keyKind = keyStructure->GetKeyKind();
 
-			if (!keyControlStructure[0])
+			if (keyKind == "value")
 			{
-				keyControlStructure[0] = keyStructure;
+				if (!keyValueStructure)
+				{
+					keyValueStructure = keyStructure;
+				}
+				else
+				{
+					return (kDataExtraneousSubstructure);
+				}
 			}
-			else
+			else if (keyKind == "-control")
 			{
-				return (kDataExtraneousSubstructure);
-			}
-		}
-		else if (keyKind == "+control")
-		{
-			if (curveType != "bezier")
-			{
-				return (kDataOpenGexInvalidKeyKind);
-			}
+				if (curveType != "bezier")
+				{
+					return (kDataOpenGexInvalidKeyKind);
+				}
 
-			if (!keyControlStructure[1])
-			{
-				keyControlStructure[1] = keyStructure;
+				if (!keyControlStructure[0])
+				{
+					keyControlStructure[0] = keyStructure;
+				}
+				else
+				{
+					return (kDataExtraneousSubstructure);
+				}
 			}
-			else
+			else if (keyKind == "+control")
 			{
-				return (kDataExtraneousSubstructure);
-			}
-		}
-		else if (keyKind == "tension")
-		{
-			if (curveType != "tcb")
-			{
-				return (kDataOpenGexInvalidKeyKind);
-			}
+				if (curveType != "bezier")
+				{
+					return (kDataOpenGexInvalidKeyKind);
+				}
 
-			if (!keyTensionStructure)
-			{
-				keyTensionStructure = keyStructure;
+				if (!keyControlStructure[1])
+				{
+					keyControlStructure[1] = keyStructure;
+				}
+				else
+				{
+					return (kDataExtraneousSubstructure);
+				}
 			}
-			else
+			else if (keyKind == "tension")
 			{
-				return (kDataExtraneousSubstructure);
-			}
-		}
-		else if (keyKind == "continuity")
-		{
-			if (curveType != "tcb")
-			{
-				return (kDataOpenGexInvalidKeyKind);
-			}
+				if (curveType != "tcb")
+				{
+					return (kDataOpenGexInvalidKeyKind);
+				}
 
-			if (!keyContinuityStructure)
-			{
-				keyContinuityStructure = keyStructure;
+				if (!keyTensionStructure)
+				{
+					keyTensionStructure = keyStructure;
+				}
+				else
+				{
+					return (kDataExtraneousSubstructure);
+				}
 			}
-			else
+			else if (keyKind == "continuity")
 			{
-				return (kDataExtraneousSubstructure);
-			}
-		}
-		else if (keyKind == "bias")
-		{
-			if (curveType != "tcb")
-			{
-				return (kDataOpenGexInvalidKeyKind);
-			}
+				if (curveType != "tcb")
+				{
+					return (kDataOpenGexInvalidKeyKind);
+				}
 
-			if (!keyBiasStructure)
-			{
-				keyBiasStructure = keyStructure;
+				if (!keyContinuityStructure)
+				{
+					keyContinuityStructure = keyStructure;
+				}
+				else
+				{
+					return (kDataExtraneousSubstructure);
+				}
 			}
-			else
+			else if (keyKind == "bias")
 			{
-				return (kDataExtraneousSubstructure);
+				if (curveType != "tcb")
+				{
+					return (kDataOpenGexInvalidKeyKind);
+				}
+
+				if (!keyBiasStructure)
+				{
+					keyBiasStructure = keyStructure;
+				}
+				else
+				{
+					return (kDataExtraneousSubstructure);
+				}
 			}
 		}
 
@@ -2710,20 +2954,24 @@ DataResult TimeStructure::ProcessData(DataDescription *dataDescription)
 	const Structure *structure = GetFirstSubnode();
 	while (structure)
 	{
-		const DataStructure<FloatDataType> *dataStructure = static_cast<DataStructure<FloatDataType> *>(structure->GetFirstSubnode());
-		if (dataStructure->GetArraySize() != 0)
+		if (structure->GetStructureType() == kStructureKey)
 		{
-			return (kDataInvalidDataFormat);
-		}
+			const KeyStructure *keyStructure = static_cast<const KeyStructure *>(structure);
+			const DataStructure<FloatDataType> *dataStructure = static_cast<DataStructure<FloatDataType> *>(keyStructure->GetFirstCoreSubnode());
+			if (dataStructure->GetArraySize() != 0)
+			{
+				return (kDataInvalidDataFormat);
+			}
 
-		int32 count = dataStructure->GetDataElementCount();
-		if (elementCount == 0)
-		{
-			elementCount = count;
-		}
-		else if (count != elementCount)
-		{
-			return (kDataOpenGexKeyCountMismatch);
+			int32 count = dataStructure->GetDataElementCount();
+			if (elementCount == 0)
+			{
+				elementCount = count;
+			}
+			else if (count != elementCount)
+			{
+				return (kDataOpenGexKeyCountMismatch);
+			}
 		}
 
 		structure = structure->Next();
@@ -2757,7 +3005,7 @@ DataResult ValueStructure::ProcessData(DataDescription *dataDescription)
 	}
 
 	const AnimatableStructure *targetStructure = static_cast<TrackStructure *>(GetSuperNode())->GetTargetStructure();
-	const Structure *targetDataStructure = targetStructure->GetFirstSubnode();
+	const Structure *targetDataStructure = targetStructure->GetFirstCoreSubnode();
 	if ((targetDataStructure) && (targetDataStructure->GetStructureType() == kDataFloat))
 	{
 		unsigned_int32 targetArraySize = static_cast<const PrimitiveStructure *>(targetDataStructure)->GetArraySize();
@@ -2766,22 +3014,26 @@ DataResult ValueStructure::ProcessData(DataDescription *dataDescription)
 		const Structure *structure = GetFirstSubnode();
 		while (structure)
 		{
-			const DataStructure<FloatDataType> *dataStructure = static_cast<DataStructure<FloatDataType> *>(structure->GetFirstSubnode());
-			unsigned_int32 arraySize = dataStructure->GetArraySize();
+			if (structure->GetStructureType() == kStructureKey)
+			{
+				const KeyStructure *keyStructure = static_cast<const KeyStructure *>(structure);
+				const DataStructure<FloatDataType> *dataStructure = static_cast<DataStructure<FloatDataType> *>(keyStructure->GetFirstCoreSubnode());
+				unsigned_int32 arraySize = dataStructure->GetArraySize();
 
-			if ((!static_cast<const KeyStructure *>(structure)->GetScalarFlag()) && (arraySize != targetArraySize))
-			{
-				return (kDataInvalidDataFormat);
-			}
+				if ((!keyStructure->GetScalarFlag()) && (arraySize != targetArraySize))
+				{
+					return (kDataInvalidDataFormat);
+				}
 
-			int32 count = dataStructure->GetDataElementCount() / Max(arraySize, 1);
-			if (elementCount == 0)
-			{
-				elementCount = count;
-			}
-			else if (count != elementCount)
-			{
-				return (kDataOpenGexKeyCountMismatch);
+				int32 count = dataStructure->GetDataElementCount() / Max(arraySize, 1);
+				if (elementCount == 0)
+				{
+					elementCount = count;
+				}
+				else if (count != elementCount)
+				{
+					return (kDataOpenGexKeyCountMismatch);
+				}
 			}
 
 			structure = structure->Next();
@@ -2794,7 +3046,7 @@ DataResult ValueStructure::ProcessData(DataDescription *dataDescription)
 }
 
 
-TrackStructure::TrackStructure() : Structure(kStructureTrack)
+TrackStructure::TrackStructure() : OpenGexStructure(kStructureTrack)
 {
 	targetStructure = nullptr;
 }
@@ -2817,7 +3069,12 @@ bool TrackStructure::ValidateProperty(const DataDescription *dataDescription, co
 
 bool TrackStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetBaseStructureType() == kStructureCurve);
+	if (structure->GetBaseStructureType() == kStructureCurve)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult TrackStructure::ProcessData(DataDescription *dataDescription)
@@ -2833,7 +3090,7 @@ DataResult TrackStructure::ProcessData(DataDescription *dataDescription)
 		return (kDataBrokenRef);
 	}
 
-	if ((target->GetBaseStructureType() != kStructureMatrix) && (target->GetStructureType() != kStructureMorph))
+	if ((target->GetBaseStructureType() != kStructureMatrix) && (target->GetStructureType() != kStructureMorphWeight))
 	{
 		return (kDataOpenGexInvalidTargetStruct);
 	}
@@ -2895,7 +3152,7 @@ DataResult TrackStructure::ProcessData(DataDescription *dataDescription)
 }
 
 
-AnimationStructure::AnimationStructure() : Structure(kStructureAnimation)
+AnimationStructure::AnimationStructure() : OpenGexStructure(kStructureAnimation)
 {
 	clipIndex = 0;
 	beginFlag = false;
@@ -2936,7 +3193,12 @@ bool AnimationStructure::ValidateProperty(const DataDescription *dataDescription
 
 bool AnimationStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
 {
-	return (structure->GetStructureType() == kStructureTrack);
+	if (structure->GetStructureType() == kStructureTrack)
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
 }
 
 DataResult AnimationStructure::ProcessData(DataDescription *dataDescription)
@@ -2958,6 +3220,111 @@ DataResult AnimationStructure::ProcessData(DataDescription *dataDescription)
 }
 
 
+ClipStructure::ClipStructure() : OpenGexStructure(kStructureClip)
+{
+	clipIndex = 0;
+}
+
+ClipStructure::~ClipStructure()
+{
+}
+
+bool ClipStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "index")
+	{
+		*type = kDataUnsignedInt32;
+		*value = &clipIndex;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool ClipStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	StructureType type = structure->GetStructureType();
+	if ((type == kStructureName) || (type == kStructureParam))
+	{
+		return (true);
+	}
+
+	return (OpenGexStructure::ValidateSubstructure(dataDescription, structure));
+}
+
+DataResult ClipStructure::ProcessData(DataDescription *dataDescription)
+{
+	DataResult result = Structure::ProcessData(dataDescription);
+	if (result != kDataOkay)
+	{
+		return (result);
+	}
+
+	frameRate = 0.0F;
+	clipName = nullptr;
+
+	const Structure *structure = GetFirstSubnode();
+	while (structure)
+	{
+		StructureType type = structure->GetStructureType();
+		if (type == kStructureName)
+		{
+			if (clipName)
+			{
+				return (kDataExtraneousSubstructure);
+			}
+
+			clipName = static_cast<const NameStructure *>(structure)->GetName();
+		}
+		else if (type == kStructureParam)
+		{
+			const ParamStructure *paramStructure = static_cast<const ParamStructure *>(structure);
+			if (paramStructure->GetAttribString() == "rate")
+			{
+				frameRate = paramStructure->GetParam();
+			}
+		}
+
+		structure = structure->Next();
+	}
+
+	return (kDataOkay);
+}
+
+
+ExtensionStructure::ExtensionStructure() : OpenGexStructure(kStructureExtension)
+{
+}
+
+ExtensionStructure::~ExtensionStructure()
+{
+}
+
+bool ExtensionStructure::ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value)
+{
+	if (identifier == "applic")
+	{
+		*type = kDataString;
+		*value = &applicationString;
+		return (true);
+	}
+
+	if (identifier == "type")
+	{
+		*type = kDataString;
+		*value = &typeString;
+		return (true);
+	}
+
+	return (false);
+}
+
+bool ExtensionStructure::ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const
+{
+	return ((structure->GetBaseStructureType() == kStructurePrimitive) || (structure->GetStructureType() == kStructureExtension));
+}
+
+
 OpenGexDataDescription::OpenGexDataDescription()
 {
 	distanceScale = 1.0F;
@@ -2970,26 +3337,51 @@ OpenGexDataDescription::~OpenGexDataDescription()
 {
 }
 
-Structure *OpenGexDataDescription::ConstructStructure(const String& identifier) const
+Structure *OpenGexDataDescription::CreateStructure(const String& identifier) const
 {
 	if (identifier == "Metric")
 	{
 		return (new MetricStructure);
 	}
 
-	if (identifier == "VertexArray")
+	if (identifier == "Name")
 	{
-		return (new VertexArrayStructure);
+		return (new NameStructure);
 	}
 
-	if (identifier == "IndexArray")
+	if (identifier == "ObjectRef")
 	{
-		return (new IndexArrayStructure);
+		return (new ObjectRefStructure);
 	}
 
-	if (identifier == "Mesh")
+	if (identifier == "MaterialRef")
 	{
-		return (new MeshStructure);
+		return (new MaterialRefStructure);
+	}
+
+	if (identifier == "Transform")
+	{
+		return (new TransformStructure);
+	}
+
+	if (identifier == "Translation")
+	{
+		return (new TranslationStructure);
+	}
+
+	if (identifier == "Rotation")
+	{
+		return (new RotationStructure);
+	}
+
+	if (identifier == "Scale")
+	{
+		return (new ScaleStructure);
+	}
+
+	if (identifier == "MorphWeight")
+	{
+		return (new MorphWeightStructure);
 	}
 
 	if (identifier == "Node")
@@ -3017,59 +3409,14 @@ Structure *OpenGexDataDescription::ConstructStructure(const String& identifier) 
 		return (new CameraNodeStructure);
 	}
 
-	if (identifier == "GeometryObject")
+	if (identifier == "VertexArray")
 	{
-		return (new GeometryObjectStructure);
+		return (new VertexArrayStructure);
 	}
 
-	if (identifier == "LightObject")
+	if (identifier == "IndexArray")
 	{
-		return (new LightObjectStructure);
-	}
-
-	if (identifier == "CameraObject")
-	{
-		return (new CameraObjectStructure);
-	}
-
-	if (identifier == "Transform")
-	{
-		return (new TransformStructure);
-	}
-
-	if (identifier == "Translation")
-	{
-		return (new TranslationStructure);
-	}
-
-	if (identifier == "Rotation")
-	{
-		return (new RotationStructure);
-	}
-
-	if (identifier == "Scale")
-	{
-		return (new ScaleStructure);
-	}
-
-	if (identifier == "Name")
-	{
-		return (new NameStructure);
-	}
-
-	if (identifier == "ObjectRef")
-	{
-		return (new ObjectRefStructure);
-	}
-
-	if (identifier == "MaterialRef")
-	{
-		return (new MaterialRefStructure);
-	}
-
-	if (identifier == "Morph")
-	{
-		return (new MorphStructure);
+		return (new IndexArrayStructure);
 	}
 
 	if (identifier == "BoneRefArray")
@@ -3102,9 +3449,29 @@ Structure *OpenGexDataDescription::ConstructStructure(const String& identifier) 
 		return (new SkinStructure);
 	}
 
-	if (identifier == "Material")
+	if (identifier == "Morph")
 	{
-		return (new MaterialStructure);
+		return (new MorphStructure);
+	}
+
+	if (identifier == "Mesh")
+	{
+		return (new MeshStructure);
+	}
+
+	if (identifier == "GeometryObject")
+	{
+		return (new GeometryObjectStructure);
+	}
+
+	if (identifier == "LightObject")
+	{
+		return (new LightObjectStructure);
+	}
+
+	if (identifier == "CameraObject")
+	{
+		return (new CameraObjectStructure);
 	}
 
 	if (identifier == "Param")
@@ -3125,6 +3492,11 @@ Structure *OpenGexDataDescription::ConstructStructure(const String& identifier) 
 	if (identifier == "Atten")
 	{
 		return (new AttenStructure);
+	}
+
+	if (identifier == "Material")
+	{
+		return (new MaterialStructure);
 	}
 
 	if (identifier == "Key")
@@ -3152,6 +3524,16 @@ Structure *OpenGexDataDescription::ConstructStructure(const String& identifier) 
 		return (new AnimationStructure);
 	}
 
+	if (identifier == "Clip")
+	{
+		return (new ClipStructure);
+	}
+
+	if (identifier == "Extension")
+	{
+		return (new ExtensionStructure);
+	}
+
 	return (nullptr);
 }
 
@@ -3164,7 +3546,7 @@ bool OpenGexDataDescription::ValidateTopLevelStructure(const Structure *structur
 	}
 
 	type = structure->GetStructureType();
-	return ((type == kStructureMetric) || (type == kStructureMaterial));
+	return ((type == kStructureMetric) || (type == kStructureMaterial) || (type == kStructureClip) || (type == kStructureExtension));
 }
 
 DataResult OpenGexDataDescription::ProcessData(void)
@@ -3182,4 +3564,46 @@ DataResult OpenGexDataDescription::ProcessData(void)
 	}
 
 	return (result);
+}
+
+
+int WINAPI WinMain(HINSTANCE instance, HINSTANCE prevInstance, LPSTR commandLine, int cmdShow)
+{
+	// Import the file "Code/Example.ogex".
+
+	HANDLE handle = CreateFile("Code\\Example.ogex", GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (handle != INVALID_HANDLE_VALUE)
+	{
+		OpenGexDataDescription	openGexDataDescription;
+		DWORD					actual;
+
+		DWORD size = GetFileSize(handle, nullptr);
+		char *buffer = new char[size + 1];
+
+		// Read the entire contents of the file and put a zero terminator at the end.
+
+		ReadFile(handle, buffer, size, &actual, nullptr);
+		buffer[size] = 0;
+
+		// Once the file is in memory, the DataDescription::ProcessText() function
+		// is called to create the structure tree and process the data.
+
+		DataResult result = openGexDataDescription.ProcessText(buffer);
+		if (result == kDataOkay)
+		{
+			const Structure *structure = openGexDataDescription.GetRootStructure()->GetFirstSubnode();
+			while (structure)
+			{
+				// This loops over all top-level structures in the file.
+
+				// Do something with the data...
+
+				structure = structure->Next();
+			}
+		}
+
+		delete[] buffer;
+	}
+
+	return (0);
 }

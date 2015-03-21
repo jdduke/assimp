@@ -2,8 +2,8 @@
 	OpenDDL Library Software License
 	==================================
 
-	OpenDDL Library, version 1.0
-	Copyright 2014, Eric Lengyel
+	OpenDDL Library, version 1.1
+	Copyright 2014-2015, Eric Lengyel
 	All rights reserved.
 
 	The OpenDDL Library is free software published on the following website:
@@ -106,6 +106,7 @@ namespace ODDL
 			String();
 			~String();
 
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 			String(String&& s)
 			{
 				logicalSize = s.logicalSize;
@@ -114,6 +115,7 @@ namespace ODDL
 
 				s.stringPointer = emptyString;
 			}
+#endif
 
 			String(const String& s);
 			String(const char *s);
@@ -172,7 +174,9 @@ namespace ODDL
 			void Purge(void);
 			String& Set(const char *s, int32 length);
 
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 			String& operator =(String&& s);
+#endif
 			String& operator =(const String& s);
 			String& operator =(const char *s);
 			String& operator +=(const String& s);

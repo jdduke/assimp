@@ -42,9 +42,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "AssimpPCH.h"
 #include "OpenGEXImporter.h"
 
+#include "MakeVerboseFormat.h"
 #include "./../contrib/OpenGEX/OpenGEX.h"
 
-#include <unordered_map>
+#include <map>
 
 static const aiImporterDesc desc = {
 	"Open Game Engine Exchange",
@@ -62,22 +63,6 @@ static const aiImporterDesc desc = {
 using namespace ODDL;
 using namespace OGEX;
 
-using std::move;
-using std::unique_ptr;
-
-namespace std {
-template<typename a, typename b>
-struct hash< std::pair<a, b> > {
-private:
-	const hash<a> ah;
-	const hash<b> bh;
-public:
-	hash() : ah(), bh() {}
-	size_t operator()(const std::pair<a, b>& p) const {
-		return ah(p.first) ^ bh(p.second);
-	}
-};
-}
 namespace Assimp {
 namespace OpenGEX {
 
@@ -98,6 +83,46 @@ bool IsNode(const Structure& structure) {
 	       type == kStructureLightNode ||
 	       type == kStructureCameraNode ||
 	       type == kStructureGeometryNode;
+}
+
+const char* DataResultToString(DataResult result) {
+#define CASE_DATA_RESULT(NAME)	case kDataOpenGex ## NAME: return #NAME;
+	switch (result) {
+		CASE_DATA_RESULT(InvalidUpDirection);
+		CASE_DATA_RESULT(InvalidTranslationKind);
+		CASE_DATA_RESULT(InvalidRotationKind);
+		CASE_DATA_RESULT(InvalidScaleKind);
+		CASE_DATA_RESULT(DuplicateLod);
+		CASE_DATA_RESULT(MissingLodSkin);
+		CASE_DATA_RESULT(MissingLodMorph);
+		CASE_DATA_RESULT(DuplicateMorph);
+		CASE_DATA_RESULT(UndefinedLightType);
+		CASE_DATA_RESULT(UndefinedCurve);
+		CASE_DATA_RESULT(UndefinedAtten);
+		CASE_DATA_RESULT(DuplicateVertexArray);
+		CASE_DATA_RESULT(PositionArrayRequired);
+		CASE_DATA_RESULT(VertexCountUnsupported);
+		CASE_DATA_RESULT(IndexValueUnsupported);
+		CASE_DATA_RESULT(IndexArrayRequired);
+		CASE_DATA_RESULT(VertexCountMismatch);
+		CASE_DATA_RESULT(BoneCountMismatch);
+		CASE_DATA_RESULT(BoneWeightCountMismatch);
+		CASE_DATA_RESULT(InvalidBoneRef);
+		CASE_DATA_RESULT(InvalidObjectRef);
+		CASE_DATA_RESULT(InvalidMaterialRef);
+		CASE_DATA_RESULT(MaterialIndexUnsupported);
+		CASE_DATA_RESULT(DuplicateMaterialRef);
+		CASE_DATA_RESULT(MissingMaterialRef);
+		CASE_DATA_RESULT(TargetRefNotLocal);
+		CASE_DATA_RESULT(InvalidTargetStruct);
+		CASE_DATA_RESULT(InvalidKeyKind);
+		CASE_DATA_RESULT(InvalidCurveType);
+		CASE_DATA_RESULT(KeyCountMismatch);
+		CASE_DATA_RESULT(EmptyKeyStructure);
+		default:
+			return "Unknown result";
+	}
+#undef CASE_DATA_RESULT
 }
 
 void ConvertFloatArray(const float* data, aiVector3D& v) {
@@ -188,8 +213,11 @@ void ConvertTypedIndexArray(const PrimitiveStructure& primitiveStructure, aiFace
 	}
 }
 
+// Returns whether vertices are uniquely indexed (i.e., the mesh indexing is "verbose").
 void ConvertIndexArray(const IndexArrayStructure& structure, aiFace** pFaceArray, unsigned int* pNumFaces) {
+	// TODO: Account for index winding order (structure.GetFrontFace()).
 	const PrimitiveStructure* primitiveStructure = structure.GetPrimitiveStructure();
+	ai_assert(primitiveStructure &&	"Invalid primitive structure handle");
 	StructureType type = primitiveStructure->GetStructureType();
 	if (type == kDataUnsignedInt8) {
 		return ConvertTypedIndexArray<UnsignedInt8DataType>(*primitiveStructure, pFaceArray, pNumFaces);
@@ -202,18 +230,59 @@ void ConvertIndexArray(const IndexArrayStructure& structure, aiFace** pFaceArray
 	}
 }
 
-template <typename Type>
-void SafeAllocateAndMove(std::vector< std::unique_ptr<Type> >& source, Type*** pDest, unsigned int* pCount) {
+void GenerateDefaultIndexArray(aiMesh* mesh) {
+	unsigned int stride = 3;
+	switch (mesh->mPrimitiveTypes) {
+		case aiPrimitiveType_POINT:
+			stride = 1;
+			break;
+		case aiPrimitiveType_LINE:
+			stride = 2;
+			break;
+		case aiPrimitiveType_TRIANGLE:
+			stride = 3;
+			break;
+		case aiPrimitiveType_POLYGON:
+			stride = mesh->mNumVertices;
+			break;
+		default:
+			ai_assert(false && "Invalid primitive type.");
+			break;
+	}
+
+	unsigned int faceCount = mesh->mNumVertices / stride;
+	mesh->mFaces = new aiFace[faceCount];
+	mesh->mNumFaces = faceCount;
+
+	for (unsigned int fi = 0, vi = 0; fi < faceCount; ++fi, vi += stride) {
+		mesh->mFaces[fi].mNumIndices = stride;
+		mesh->mFaces[fi].mIndices = new unsigned int[stride];
+		for (unsigned int j = 0; j < stride; ++j) {
+			mesh->mFaces[fi].mIndices[j] = vi + j;
+		}
+	}
+}
+
+template <typename T>
+void SafeAllocateAndMove(std::vector< T* >& source, T*** pDest, unsigned int* pCount) {
 	if (source.empty()) {
 		*pCount = 0;
 		*pDest = nullptr;
 		return;
 	}
 	*pCount = static_cast<unsigned int>(source.size());
-	*pDest = new Type*[source.size()]();
+	*pDest = new T*[source.size()]();
 	for (size_t i = 0; i < source.size(); ++i) {
-		(*pDest)[i] = source[i].release();
+		(*pDest)[i] = source[i];
 	}
+	source.clear();
+}
+
+template <typename T>
+void SafeDelete(std::vector< T* >& source) {
+	for (size_t i = 0; i < source.size(); ++i)
+		delete source[i];
+	source.clear();
 }
 
 struct Visitor {
@@ -383,11 +452,18 @@ public:
 
 		if (out->mNumMeshes == 0) {
 			out->mFlags |= AI_SCENE_FLAGS_INCOMPLETE;
-		} else {
-			out->mFlags |= AI_SCENE_FLAGS_NON_VERBOSE_FORMAT;
 		}
 	}
 
+	~OpenGEXConverter() {
+		SafeDelete(rawMeshes);
+		// Pointer containers should all be empty if import is successful.
+		SafeDelete(meshes);
+		SafeDelete(materials);
+		SafeDelete(animations);
+		SafeDelete(lights);
+		SafeDelete(cameras);
+	}
 
 private:
 
@@ -413,14 +489,14 @@ private:
 	void ConvertNodes(const Structure& parentStructure, aiNode& parentNode) {
 		const Structure* structure = parentStructure.GetFirstSubnode();
 
-		std::vector< std::unique_ptr<aiNode> > nodes;
+		std::vector< aiNode* > nodes;
 		while (structure) {
 			if (IsNode(*structure)) {
-				unique_ptr<aiNode> node(ConvertNodeStructure(*static_cast<const NodeStructure*>(structure)));
+				aiNode* node(ConvertNodeStructure(*static_cast<const NodeStructure*>(structure)));
 				ai_assert(node);
 				node->mParent = &parentNode;
 				ConvertNodes(*structure, *node);
-				nodes.push_back(move(node));
+				nodes.push_back(node);
 			}
 
 			structure = structure->Next();
@@ -429,7 +505,7 @@ private:
 		SafeAllocateAndMove(nodes, &parentNode.mChildren, &parentNode.mNumChildren);
 	}
 
-	unique_ptr<aiNode> ConvertNodeStructure(const NodeStructure& nodeStructure) {
+	aiNode* ConvertNodeStructure(const NodeStructure& nodeStructure) {
 		ai_assert(IsNode(nodeStructure));
 		StructureType type = nodeStructure.GetStructureType();
 		switch (nodeStructure.GetStructureType()) {
@@ -442,7 +518,7 @@ private:
 				ai_assert(false && "Invalid node structure type");
 				break;
 		}
-		return unique_ptr<aiNode>();
+		return NULL;
 	}
 
 	void ConvertObjectStructure(const Structure& structure) {
@@ -479,7 +555,7 @@ private:
 		materials.push_back(CreateDefaultMaterial());
 	}
 
-	unique_ptr<aiMesh> ConvertGeometryObject(const GeometryObjectStructure& structure) {
+	aiMesh* ConvertGeometryObject(const GeometryObjectStructure& structure) {
 		const Map<MeshStructure>* meshMap = structure.GetMeshMap();
 		ai_assert(meshMap && "Geometry object lacks a valid mesh map");
 		ai_assert(!meshMap->Empty() && "Geometry object lacks a valid mesh");
@@ -495,30 +571,30 @@ private:
 		return ConvertMesh(*meshStructure);
 	}
 
-	unique_ptr<aiLight> ConvertLightObject(const LightObjectStructure& structure) {
-		unique_ptr<aiLight> light(new aiLight());
-
-		return move(light);
+	aiLight* ConvertLightObject(const LightObjectStructure& structure) {
+		aiLight* light(new aiLight());
+		// TODO: Implement.
+		return light;
 	}
 
-	unique_ptr<aiCamera> ConvertCameraObject(const CameraObjectStructure& structure) {
-		unique_ptr<aiCamera> camera(new aiCamera());
-
-		return move(camera);
+	aiCamera* ConvertCameraObject(const CameraObjectStructure& structure) {
+		aiCamera* camera(new aiCamera());
+		// TODO: Implement.
+		return camera;
 	}
 
-	unique_ptr<aiMaterial> ConvertMaterial(const MaterialStructure& structure) {
+	aiMaterial* ConvertMaterial(const MaterialStructure& structure) {
 		return CreateDefaultMaterial();
 
-		/* TODO: Convert material
-		unique_ptr<aiMaterial> material(new aiMaterial());
+		/* TODO: Implement
+		aiMaterial* material(new aiMaterial());
 
-		return move(material);
+		return material;
 		*/
 	}
 
-	static unique_ptr<aiMaterial> CreateDefaultMaterial() {
-		unique_ptr<aiMaterial> material(new aiMaterial());
+	static aiMaterial* CreateDefaultMaterial() {
+		aiMaterial* material(new aiMaterial());
 
 		aiString s;
 		s.Set(AI_DEFAULT_MATERIAL_NAME);
@@ -529,30 +605,30 @@ private:
 		clrDiffuse = aiColor4D(0.05f, 0.05f, 0.05f, 1.0f);
 		material->AddProperty(&clrDiffuse, 1, AI_MATKEY_COLOR_AMBIENT);
 
-		return move(material);
+		return material;
 	}
 
-	unique_ptr<aiNode> ConvertNode(const NodeStructure& structure) {
-		unique_ptr<aiNode> node(new aiNode);
+	aiNode* ConvertNode(const NodeStructure& structure) {
+		aiNode* node(new aiNode);
 
 		node->mName = structure.GetNodeName();
 
 		TransformVisitor transformVisitor(&node->mTransformation);
 		VisitSubnodes(structure, transformVisitor);
 
-		return move(node);
+		return node;
 	}
 
-	unique_ptr<aiNode> ConvertBoneNode(const BoneNodeStructure& structure) {
-		unique_ptr<aiNode> node = ConvertNode(structure);
-
-		return move(node);
+	aiNode* ConvertBoneNode(const BoneNodeStructure& structure) {
+		aiNode* node = ConvertNode(structure);
+		// TODO: Implement;
+		return node;
 	}
 
-	unique_ptr<aiMesh> CloneMesh(const aiMesh& mesh) {
-		unique_ptr<aiMesh> clone(new aiMesh());
+	aiMesh* CloneMesh(const aiMesh& mesh) {
+		aiMesh* clone(new aiMesh());
 		// TODO: Handle multiple mesh references.
-		return move(clone);
+		return clone;
 	}
 
 	unsigned int FindOrInsertMeshWithMaterial(const GeometryObjectStructure* geometry, const MaterialStructure* material) {
@@ -568,10 +644,11 @@ private:
 
 		// First look at the raw meshes container. If it contains a mesh for the provided |geometry|, "consume" that mesh.
 		// Otherwise, clone the already consumed mesh, as it's already been used for a different material.
-		unique_ptr<aiMesh> mesh;
+		aiMesh* mesh = NULL;
 		const auto rawMeshIt = rawMeshMap.find(geometry);
 		if (rawMeshIt != rawMeshMap.end()) {
-			mesh = move(rawMeshes[rawMeshIt->second]);
+			mesh = rawMeshes[rawMeshIt->second];
+			rawMeshes.erase(rawMeshes.begin() +	rawMeshIt->second);
 			rawMeshMap.erase(rawMeshIt);
 		} else {
 			mesh = CloneMesh(*meshes[meshMap.at(geometry)]);
@@ -580,14 +657,14 @@ private:
 
 		mesh->mMaterialIndex = materialMap.at(material);
 		unsigned int meshIndex = static_cast<unsigned int>(meshes.size());
-		meshes.push_back(move(mesh));
+		meshes.push_back(mesh);
 		meshMaterialMap[meshMaterialKey] = meshIndex;
 		meshMap[geometry] = meshIndex;
 		return meshIndex;
 	}
 
-	unique_ptr<aiNode> ConvertGeometryNode(const GeometryNodeStructure& structure) {
-		unique_ptr<aiNode> node = ConvertNode(structure);
+	aiNode* ConvertGeometryNode(const GeometryNodeStructure& structure) {
+		aiNode* node = ConvertNode(structure);
 
 		const GeometryObjectStructure* geometry = structure.GetGeometryObjectStructure();
 		ai_assert(geometry && "Geometry node must contain exactly 1 geometry object");
@@ -610,19 +687,19 @@ private:
 		// TODO: Materials, visibility, shadow, motion blur.
 		// const Array<const MaterialStructure*, 4>& materials = structure.GetMaterialStructureArray();
 
-		return move(node);
+		return node;
 	}
 
-	unique_ptr<aiNode> ConvertLightNode(const LightNodeStructure& structure) {
-		unique_ptr<aiNode> node = ConvertNode(structure);
-
-		return move(node);
+	aiNode* ConvertLightNode(const LightNodeStructure& structure) {
+		aiNode* node = ConvertNode(structure);
+		// TODO: Implement.
+		return node;
 	}
 
-	unique_ptr<aiNode> ConvertCameraNode(const CameraNodeStructure& structure) {
-		unique_ptr<aiNode> node = ConvertNode(structure);
-
-		return move(node);
+	aiNode* ConvertCameraNode(const CameraNodeStructure& structure) {
+		aiNode* node = ConvertNode(structure);
+		// TODO: Implement.
+		return node;
 	}
 
 	unsigned int ConvertPrimitiveType(const String& primitive) {
@@ -636,12 +713,13 @@ private:
 		return 0;
 	}
 
-	unique_ptr<aiMesh> ConvertMesh(const MeshStructure& structure) {
-		unique_ptr<aiMesh> mesh(new aiMesh());
+	aiMesh* ConvertMesh(const MeshStructure& structure) {
+		aiMesh* mesh(new aiMesh());
 
 		mesh->mPrimitiveTypes = ConvertPrimitiveType(structure.GetMeshPrimitive());
 
 		const Structure *subStructure = structure.GetFirstSubnode();
+		bool meshIsVerbose = false;
 		while (subStructure) {
 			switch (subStructure->GetStructureType()) {
 				case kStructureVertexArray: {
@@ -671,22 +749,30 @@ private:
 				} break;
 
 				case kStructureIndexArray: {
-					ai_assert(!mesh->mNumFaces && "Only a single index array per mesh is allowed");
+					ai_assert(!mesh->mNumFaces && !mesh->mFaces && "Only a single index array per mesh is allowed");
 					const IndexArrayStructure& indexArrayStructure = *static_cast<const IndexArrayStructure *>(subStructure);
 					ConvertIndexArray(indexArrayStructure, &mesh->mFaces, &mesh->mNumFaces);
-					// TODO: Process index array here.
 				} break;
 
 				default: break;
 			}
 			subStructure = subStructure->Next();
 		}
+		ai_assert(mesh->mVertices);
+		ai_assert(mesh->mNumVertices);
 
-		// TODO: Handle no index array.
+		if (mesh->mFaces) {
+			// Ensure pseudo, "verbose" indexing.
+			if (!MakeVerboseFormatProcess::HasVerboseFormat(mesh))
+				MakeVerboseFormatProcess::MakeVerboseFormat(mesh);
+		} else {
+			// Generate a default face indexing if none has been provided.
+			GenerateDefaultIndexArray(mesh);
+		}
 
 		// TODO: Handle skin structure.
 
-		return move(mesh);
+		return mesh;
 	}
 
 	// Move all generated meshes, animations, lights, cameras and textures to the output scene.
@@ -702,14 +788,14 @@ private:
 
 private:
 
-	typedef std::unordered_map<const Structure*, unsigned int> StructureMap;
+	typedef std::map<const Structure*, unsigned int> StructureMap;
 
-	std::vector< std::unique_ptr<aiMesh> > rawMeshes;
-	std::vector< std::unique_ptr<aiMesh> > meshes;
-	std::vector< std::unique_ptr<aiMaterial> > materials;
-	std::vector< std::unique_ptr<aiAnimation> > animations;
-	std::vector< std::unique_ptr<aiLight> > lights;
-	std::vector< std::unique_ptr<aiCamera> > cameras;
+	std::vector< aiMesh* > rawMeshes;
+	std::vector< aiMesh* > meshes;
+	std::vector< aiMaterial* > materials;
+	std::vector< aiAnimation* > animations;
+	std::vector< aiLight* > lights;
+	std::vector< aiCamera* > cameras;
 
 	StructureMap rawMeshMap;
 	StructureMap materialMap;
@@ -717,7 +803,7 @@ private:
 	StructureMap lightMap;
 	StructureMap cameraMap;
 
-	typedef std::unordered_map<std::pair<const GeometryObjectStructure*, const MaterialStructure*>, unsigned int> MeshMaterialMap;
+	typedef std::map<std::pair<const GeometryObjectStructure*, const MaterialStructure*>, unsigned int> MeshMaterialMap;
 	StructureMap meshMap;
 	MeshMaterialMap meshMaterialMap;
 
@@ -767,7 +853,7 @@ void OpenGEXImporter::InternReadFile( const std::string &file, aiScene *pScene, 
 	OpenGexDataDescription openGexDataDescription;
 	DataResult result = openGexDataDescription.ProcessText(&*contents.begin());
 	if (result != kDataOkay) {
-		ThrowException("Failed to load OpenGEX file");
+		ThrowException(std::string("Failed to load OpenGEX file: ") + DataResultToString(result));
 	}
 
 	OpenGEXConverter conv(pScene, openGexDataDescription);

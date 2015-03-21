@@ -2,8 +2,8 @@
 	OpenDDL Library Software License
 	==================================
 
-	OpenDDL Library, version 1.0
-	Copyright 2014, Eric Lengyel
+	OpenDDL Library, version 1.1
+	Copyright 2014-2015, Eric Lengyel
 	All rights reserved.
 
 	The OpenDDL Library is free software published on the following website:
@@ -50,24 +50,49 @@
 
 #include <math.h>
 #include <new>
-#include <cstdint>
+
+#if !defined(ODDL_CXX11)
+#  if defined(_MSC_VER)
+#    if _MSC_VER >= 1800
+#      define ODDL_CXX11 1
+#    endif
+#  else
+#    if __cplusplus > 199711L
+#      define ODDL_CXX11 1
+#    endif
+#  endif
+#endif
+
+#if defined(ODDL_CXX11)
+#  define ODDL_DELETE delete
+#  define ODDL_FINAL final
+#  define ODDL_OVERRIDE override
+#  define ODDL_HAS_CXX11_RVALUE_REFERENCES 1
+#else
+#  define ODDL_DELETE
+#  define ODDL_FINAL
+#  define ODDL_OVERRIDE
+#  define ODDL_HAS_CXX11_RVALUE_REFERENCES 0
+#  if !defined(nullptr)
+#    define nullptr 0
+#  endif
+#endif
 
 namespace ODDL
 {
 	#define restrict __restrict
 
+	typedef signed char				int8;
+	typedef unsigned char			unsigned_int8;
 
-	typedef std::int8_t		int8;
-	typedef std::uint8_t	unsigned_int8;
+	typedef short					int16;
+	typedef unsigned short			unsigned_int16;
 
-	typedef std::int16_t	int16;
-	typedef std::uint16_t	unsigned_int16;
+	typedef int						int32;
+	typedef unsigned int			unsigned_int32;
 
-	typedef std::int32_t	int32;
-	typedef std::uint32_t	unsigned_int32;
-
-	typedef std::int64_t	int64;
-	typedef std::uint64_t	unsigned_int64;
+	typedef __int64					int64;
+	typedef unsigned __int64		unsigned_int64;
 
 	#if defined(_WIN64)
 

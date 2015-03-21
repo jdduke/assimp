@@ -2,8 +2,8 @@
 	OpenDDL Library Software License
 	==================================
 
-	OpenDDL Library, version 1.0
-	Copyright 2014, Eric Lengyel
+	OpenDDL Library, version 1.1
+	Copyright 2014-2015, Eric Lengyel
 	All rights reserved.
 
 	The OpenDDL Library is free software published on the following website:
@@ -63,7 +63,7 @@ namespace ODDL
 	//# The $Array$ class represents a dynamically resizable array of objects
 	//# for which any entry can be accessed in constant time.
 	//
-	//# \def	template <typename type, int32 baseCount = 0> class Array : public ImmutableArray<type>
+	//# \def	template <typename type, int32 baseCount = 0> class Array ODDL_FINAL : public ImmutableArray<type>
 	//
 	//# \tparam		type			The type of the class that can be stored in the array.
 	//# \tparam		baseCount		The minimum number of array elements for which storage is available inside the $Array$ object itself.
@@ -255,9 +255,7 @@ namespace ODDL
 				reservedCount = 0;
 				arrayPointer = 0;
 			}
-
-			ImmutableArray(const ImmutableArray& array);
-
+			ImmutableArray(const ImmutableArray& array) {}
 			~ImmutableArray()
 			{
 			}
@@ -311,7 +309,7 @@ namespace ODDL
 	}
 
 
-	template <typename type, int32 baseCount = 0> class Array : public ImmutableArray<type>
+	template <typename type, int32 baseCount = 0> class Array ODDL_FINAL : public ImmutableArray<type>
 	{
 		private:
 
@@ -327,6 +325,9 @@ namespace ODDL
 
 			explicit Array();
 			Array(const Array& array);
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
+			Array(Array&& array);
+#endif
 			~Array();
 
 			void Clear(void);
@@ -336,8 +337,12 @@ namespace ODDL
 			void SetElementCount(int32 count, const type *init = nullptr);
 			type *AddElement(void);
 
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 			template <typename T> void AddElement(T&& element);
 			template <typename T> void InsertElement(int32 index, T&& element);
+#endif
+			template <typename T> void AddElement(const T& element);
+			template <typename T> void InsertElement(int32 index, const T& element);
 
 			void RemoveElement(int32 index);
 	};
@@ -369,6 +374,34 @@ namespace ODDL
 			new(&arrayPointer[a]) type(array.arrayPointer[a]);
 		}
 	}
+
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
+	template <typename type, int32 baseCount> Array<type, baseCount>::Array(Array&& array)
+	{
+		elementCount = array.elementCount;
+		reservedCount = array.reservedCount;
+
+		if (elementCount > baseCount)
+		{
+			arrayPointer = array.arrayPointer;
+		}
+		else
+		{
+			arrayPointer = reinterpret_cast<type *>(arrayStorage);
+
+			type *pointer = array.arrayPointer;
+			for (machine a = 0; a < elementCount; a++)
+			{
+				new(&arrayPointer[a]) type(static_cast<type&&>(pointer[a]));
+				pointer[a].~type();
+			}
+		}
+
+		array.elementCount = 0;
+		array.reservedCount = baseCount;
+		array.arrayPointer = reinterpret_cast<type *>(array.arrayStorage);
+	}
+#endif
 
 	template <typename type, int32 baseCount> Array<type, baseCount>::~Array()
 	{
@@ -423,7 +456,11 @@ namespace ODDL
 		type *pointer = arrayPointer;
 		for (machine a = 0; a < elementCount; a++)
 		{
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 			new(&newPointer[a]) type(static_cast<type&&>(*pointer));
+#else
+			new(&newPointer[a]) type(*pointer);
+#endif
 			pointer->~type();
 			pointer++;
 		}
@@ -496,6 +533,7 @@ namespace ODDL
 		return (pointer);
 	}
 
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 	template <typename type, int32 baseCount> template <typename T> void Array<type, baseCount>::AddElement(T&& element)
 	{
 		if (elementCount >= reservedCount)
@@ -547,6 +585,59 @@ namespace ODDL
 			elementCount = count;
 		}
 	}
+#endif
+
+	template <typename type, int32 baseCount> template <typename T> void Array<type, baseCount>::AddElement(const T& element)
+	{
+		if (elementCount >= reservedCount)
+		{
+			SetReservedCount(elementCount + 1);
+		}
+
+		type *pointer = arrayPointer + elementCount;
+		new(pointer) type(element);
+
+		elementCount++;
+	}
+
+	template <typename type, int32 baseCount> template <typename T> void Array<type, baseCount>::InsertElement(int32 index, const T& element)
+	{
+		if (index >= elementCount)
+		{
+			int32 count = index + 1;
+			if (count > reservedCount)
+			{
+				SetReservedCount(count);
+			}
+
+			type *pointer = &arrayPointer[elementCount - 1];
+			for (machine a = elementCount; a < index; a++)
+			{
+				new(++pointer) type;
+			}
+
+			new (++pointer) type(element);
+			elementCount = count;
+		}
+		else
+		{
+			int32 count = elementCount + 1;
+			if (count > reservedCount)
+			{
+				SetReservedCount(count);
+			}
+
+			type *pointer = &arrayPointer[elementCount];
+			for (machine a = elementCount; a > index; a--)
+			{
+				new(pointer) type(pointer[-1]);
+				(--pointer)->~type();
+			}
+
+			new (&arrayPointer[index]) type(element);
+			elementCount = count;
+		}
+	}
 
 	template <typename type, int32 baseCount> void Array<type, baseCount>::RemoveElement(int32 index)
 	{
@@ -557,7 +648,11 @@ namespace ODDL
 
 			for (machine a = index + 1; a < elementCount; a++)
 			{
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 				new(pointer) type(static_cast<type&&>(pointer[1]));
+#else
+				new(pointer) type(pointer[1]);
+#endif
 				(++pointer)->~type();
 			}
 
@@ -566,7 +661,7 @@ namespace ODDL
 	}
 
 
-	template <typename type> class Array<type, 0> : public ImmutableArray<type>
+	template <typename type> class Array<type, 0> ODDL_FINAL : public ImmutableArray<type>
 	{
 		private:
 
@@ -580,6 +675,9 @@ namespace ODDL
 
 			explicit Array(int32 count = 0);
 			Array(const Array& array);
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
+			Array(Array&& array);
+#endif
 			~Array();
 
 			void Clear(void);
@@ -589,8 +687,12 @@ namespace ODDL
 			void SetElementCount(int32 count, const type *init = nullptr);
 			type *AddElement(void);
 
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 			template <typename T> void AddElement(T&& element);
 			template <typename T> void InsertElement(int32 index, T&& element);
+#endif
+			template <typename T> void AddElement(const T& element);
+			template <typename T> void InsertElement(int32 index, const T& element);
 
 			void RemoveElement(int32 index);
 	};
@@ -622,6 +724,19 @@ namespace ODDL
 			arrayPointer = nullptr;
 		}
 	}
+
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
+	template <typename type> Array<type, 0>::Array(Array&& array)
+	{
+		elementCount = array.elementCount;
+		reservedCount = array.reservedCount;
+		arrayPointer = array.arrayPointer;
+
+		array.elementCount = 0;
+		array.reservedCount = 0;
+		array.arrayPointer = nullptr;
+	}
+#endif
 
 	template <typename type> Array<type, 0>::~Array()
 	{
@@ -670,7 +785,11 @@ namespace ODDL
 		{
 			for (machine a = 0; a < elementCount; a++)
 			{
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 				new(&newPointer[a]) type(static_cast<type&&>(*pointer));
+#else
+				new(&newPointer[a]) type(*pointer);
+#endif
 				pointer->~type();
 				pointer++;
 			}
@@ -740,6 +859,7 @@ namespace ODDL
 		return (pointer);
 	}
 
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 	template <typename type> template <typename T> void Array<type, 0>::AddElement(T&& element)
 	{
 		if (elementCount >= reservedCount)
@@ -791,6 +911,59 @@ namespace ODDL
 			elementCount = count;
 		}
 	}
+#endif
+
+	template <typename type> template <typename T> void Array<type, 0>::AddElement(const T& element)
+	{
+		if (elementCount >= reservedCount)
+		{
+			SetReservedCount(elementCount + 1);
+		}
+
+		type *pointer = arrayPointer + elementCount;
+		new(pointer) type(element);
+
+		elementCount++;
+	}
+
+	template <typename type> template <typename T> void Array<type, 0>::InsertElement(int32 index, const T& element)
+	{
+		if (index >= elementCount)
+		{
+			int32 count = index + 1;
+			if (count > reservedCount)
+			{
+				SetReservedCount(count);
+			}
+
+			type *pointer = &arrayPointer[elementCount - 1];
+			for (machine a = elementCount; a < index; a++)
+			{
+				new(++pointer) type;
+			}
+
+			new (++pointer) type(element);
+			elementCount = count;
+		}
+		else
+		{
+			int32 count = elementCount + 1;
+			if (count > reservedCount)
+			{
+				SetReservedCount(count);
+			}
+
+			type *pointer = &arrayPointer[elementCount];
+			for (machine a = elementCount; a > index; a--)
+			{
+				new(pointer) type(pointer[-1]);
+				(--pointer)->~type();
+			}
+
+			new (&arrayPointer[index]) type(element);
+			elementCount = count;
+		}
+	}
 
 	template <typename type> void Array<type, 0>::RemoveElement(int32 index)
 	{
@@ -801,7 +974,11 @@ namespace ODDL
 
 			for (machine a = index + 1; a < elementCount; a++)
 			{
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 				new(pointer) type(static_cast<type&&>(pointer[1]));
+#else
+				new(pointer) type(pointer[1]);
+#endif
 				(++pointer)->~type();
 			}
 

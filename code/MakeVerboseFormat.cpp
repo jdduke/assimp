@@ -81,7 +81,7 @@ bool MakeVerboseFormatProcess::MakeVerboseFormat(aiMesh* pcMesh)
 {
 	ai_assert(NULL != pcMesh);
 
-	unsigned int iOldNumVertices = pcMesh->mNumVertices;
+    unsigned int iOldNumVertices = pcMesh->mNumVertices;
 	const unsigned int iNumVerts = pcMesh->mNumFaces*3;
 
 	aiVector3D* pvPositions = new aiVector3D[ iNumVerts ];
@@ -212,4 +212,27 @@ bool MakeVerboseFormatProcess::MakeVerboseFormat(aiMesh* pcMesh)
 		pcMesh->mBitangents = pvBitangents;
 	}
 	return (pcMesh->mNumVertices != iOldNumVertices);
+}
+
+bool MakeVerboseFormatProcess::HasVerboseFormat (const aiMesh* pcMesh)
+{
+	if (!pcMesh->mNumFaces)
+		return false;
+
+	std::vector<bool> abRefList(pcMesh->mNumVertices, false);
+	for (unsigned int fi = 0; fi < pcMesh->mNumFaces; ++fi)
+	{
+		const aiFace& face = pcMesh->mFaces[fi];
+		for (unsigned int ii = 0; ii < face.mNumIndices; ++ii)
+		{
+			if (face.mIndices[ii] >= pcMesh->mNumVertices)
+				return false;
+
+			if (abRefList[face.mIndices[ii]])
+				return false;
+
+			abRefList[face.mIndices[ii]] = true;
+		}
+	}
+	return true;
 }

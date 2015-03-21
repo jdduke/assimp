@@ -2,8 +2,8 @@
 	OpenDDL Library Software License
 	==================================
 
-	OpenDDL Library, version 1.0
-	Copyright 2014, Eric Lengyel
+	OpenDDL Library, version 1.1
+	Copyright 2014-2015, Eric Lengyel
 	All rights reserved.
 
 	The OpenDDL Library is free software published on the following website:
@@ -80,6 +80,7 @@ namespace ODDL
 		DataResult ReadCharLiteral(const char *text, int32 *textLength, unsigned_int64 *value);
 		DataResult ReadDecimalLiteral(const char *text, int32 *textLength, unsigned_int64 *value);
 		DataResult ReadHexadecimalLiteral(const char *text, int32 *textLength, unsigned_int64 *value);
+		DataResult ReadOctalLiteral(const char *text, int32 *textLength, unsigned_int64 *value);
 		DataResult ReadBinaryLiteral(const char *text, int32 *textLength, unsigned_int64 *value);
 		bool ParseSign(const char *& text);
 	}
@@ -235,6 +236,13 @@ DataResult Data::ReadDataType(const char *text, int32 *textLength, DataType *val
 		if ((Text::CompareText(text, "bool", 4)) && (identifierCharState[byte[4]] == 0))
 		{
 			*value = kDataBool;
+			*textLength = 4;
+			return (kDataOkay);
+		}
+
+		if ((Text::CompareText(text, "half", 5)) && (identifierCharState[byte[4]] == 0))
+		{
+			*value = kDataHalf;
 			*textLength = 4;
 			return (kDataOkay);
 		}
@@ -599,28 +607,43 @@ DataResult Data::ReadDecimalLiteral(const char *text, int32 *textLength, unsigne
 	const unsigned_int8 *byte = reinterpret_cast<const unsigned_int8 *>(text);
 
 	unsigned_int64 v = 0;
+	bool separator = false;
 	for (;;)
 	{
 		unsigned_int32 x = byte[0] - '0';
-		if (x >= 10U)
+		if (x < 10U)
 		{
-			break;
+			if (v >= 0x199999999999999AULL)
+			{
+				return (kDataIntegerOverflow);
+			}
+
+			unsigned_int64 w = v;
+			v = v * 10 + x;
+
+			if ((w >= 9U) && (v < 9U))
+			{
+				return (kDataIntegerOverflow);
+			}
+
+			separator = true;
 		}
-
-		if (v >= 0x199999999999999AULL)
+		else
 		{
-			return (kDataIntegerOverflow);
-		}
+			if ((x != 47) || (!separator))
+			{
+				break;
+			}
 
-		unsigned_int64 w = v;
-		v = v * 10 + x;
-
-		if ((w >= 9U) && (v < 9U))
-		{
-			return (kDataIntegerOverflow);
+			separator = false;
 		}
 
 		byte++;
+	}
+
+	if (!separator)
+	{
+		return (kDataSyntaxError);
 	}
 
 	*value = v;
@@ -633,6 +656,7 @@ DataResult Data::ReadHexadecimalLiteral(const char *text, int32 *textLength, uns
 	const unsigned_int8 *byte = reinterpret_cast<const unsigned_int8 *>(text + 2);
 
 	unsigned_int64 v = 0;
+	bool separator = false;
 	for (;;)
 	{
 		unsigned_int32 c = byte[0] - '0';
@@ -642,18 +666,81 @@ DataResult Data::ReadHexadecimalLiteral(const char *text, int32 *textLength, uns
 		}
 
 		int32 x = hexadecimalCharValue[c];
-		if (x < 0)
+		if (x >= 0)
 		{
-			break;
+			if ((v >> 60) != 0)
+			{
+				return (kDataIntegerOverflow);
+			}
+
+			v = (v << 4) | x;
+			separator = true;
+		}
+		else
+		{
+			if ((c != 47) || (!separator))
+			{
+				break;
+			}
+
+			separator = false;
 		}
 
-		if ((v >> 60) != 0)
-		{
-			return (kDataIntegerOverflow);
-		}
-
-		v = (v << 4) | x;
 		byte++;
+	}
+
+	if (!separator)
+	{
+		return (kDataSyntaxError);
+	}
+
+	*value = v;
+	*textLength = (int32) (reinterpret_cast<const char *>(byte) - text);
+	return (kDataOkay);
+}
+
+DataResult Data::ReadOctalLiteral(const char *text, int32 *textLength, unsigned_int64 *value)
+{
+	const unsigned_int8 *byte = reinterpret_cast<const unsigned_int8 *>(text + 2);
+
+	unsigned_int64 v = 0;
+	bool separator = false;
+	for (;;)
+	{
+		unsigned_int32 x = byte[0] - '0';
+		if (x < 8U)
+		{
+			if (v >= 0x2000000000000000ULL)
+			{
+				return (kDataIntegerOverflow);
+			}
+
+			unsigned_int64 w = v;
+			v = v * 8 + x;
+
+			if ((w >= 7U) && (v < 7U))
+			{
+				return (kDataIntegerOverflow);
+			}
+
+			separator = true;
+		}
+		else
+		{
+			if ((x != 47) || (!separator))
+			{
+				break;
+			}
+
+			separator = false;
+		}
+
+		byte++;
+	}
+
+	if (!separator)
+	{
+		return (kDataSyntaxError);
 	}
 
 	*value = v;
@@ -666,21 +753,36 @@ DataResult Data::ReadBinaryLiteral(const char *text, int32 *textLength, unsigned
 	const unsigned_int8 *byte = reinterpret_cast<const unsigned_int8 *>(text + 2);
 
 	unsigned_int64 v = 0;
+	bool separator = false;
 	for (;;)
 	{
-		unsigned_int32 c = byte[0] - '0';
-		if (c >= 2U)
+		unsigned_int32 x = byte[0] - '0';
+		if (x < 2U)
 		{
-			break;
+			if ((v >> 63) != 0)
+			{
+				return (kDataIntegerOverflow);
+			}
+
+			v = (v << 1) | x;
+			separator = true;
+		}
+		else
+		{
+			if ((x != 47) || (!separator))
+			{
+				break;
+			}
+
+			separator = false;
 		}
 
-		if ((v >> 63) != 0)
-		{
-			return (kDataIntegerOverflow);
-		}
-
-		v = (v << 1) | c;
 		byte++;
+	}
+
+	if (!separator)
+	{
+		return (kDataSyntaxError);
 	}
 
 	*value = v;
@@ -755,6 +857,11 @@ DataResult Data::ReadUnsignedLiteral(const char *text, int32 *textLength, unsign
 			return (ReadHexadecimalLiteral(text, textLength, value));
 		}
 
+		if ((c == 'o') || (c == 'O'))
+		{
+			return (ReadOctalLiteral(text, textLength, value));
+		}
+
 		if ((c == 'b') || (c == 'B'))
 		{
 			return (ReadBinaryLiteral(text, textLength, value));
@@ -781,6 +888,220 @@ DataResult Data::ReadUnsignedLiteral(const char *text, int32 *textLength, unsign
 	return (ReadDecimalLiteral(text, textLength, value));
 }
 
+DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, unsigned_int16 *value)
+{
+	const unsigned_int8 *byte = reinterpret_cast<const unsigned_int8 *>(text);
+
+	unsigned_int32 c = byte[0];
+	if (c == '0')
+	{
+		c = byte[1];
+
+		if ((c == 'x') || (c == 'X'))
+		{
+			unsigned_int64		v;
+
+			DataResult result = ReadHexadecimalLiteral(text, textLength, &v);
+			if (result == kDataOkay)
+			{
+				if (v > 0x000000000000FFFF)
+				{
+					return (kDataFloatOverflow);
+				}
+
+				*reinterpret_cast<unsigned_int32 *>(value) = (unsigned_int32) v;
+			}
+
+			return (result);
+		}
+
+		if ((c == 'o') || (c == 'O'))
+		{
+			unsigned_int64		v;
+
+			DataResult result = ReadOctalLiteral(text, textLength, &v);
+			if (result == kDataOkay)
+			{
+				if (v > 0x000000000000FFFF)
+				{
+					return (kDataFloatOverflow);
+				}
+
+				*reinterpret_cast<unsigned_int32 *>(value) = (unsigned_int32) v;
+			}
+
+			return (result);
+		}
+
+		if ((c == 'b') || (c == 'B'))
+		{
+			unsigned_int64		v;
+
+			DataResult result = ReadBinaryLiteral(text, textLength, &v);
+			if (result == kDataOkay)
+			{
+				if (v > 0x000000000000FFFF)
+				{
+					return (kDataFloatOverflow);
+				}
+
+				*reinterpret_cast<unsigned_int32 *>(value) = (unsigned_int32) v;
+			}
+
+			return (result);
+		}
+	}
+
+	float v = 0.0F;
+	bool separator = false;
+	for (;;)
+	{
+		unsigned_int32 x = byte[0] - '0';
+		if (x < 10U)
+		{
+			v = v * 10.0F + (float) x;
+			separator = true;
+		}
+		else
+		{
+			if ((x != 47) || (!separator))
+			{
+				break;
+			}
+
+			separator = false;
+		}
+
+		byte++;
+	}
+
+	if (!separator)
+	{
+		return (kDataSyntaxError);
+	}
+
+	c = byte[0];
+	if (c == '.')
+	{
+		byte++;
+
+		float decimal = 10.0F;
+		separator = false;
+		for (;;)
+		{
+			unsigned_int32 x = byte[0] - '0';
+			if (x < 10U)
+			{
+				v += (float) x / decimal;
+				decimal *= 10.0F;
+				separator = true;
+			}
+			else
+			{
+				if ((x != 47) || (!separator))
+				{
+					break;
+				}
+
+				separator = false;
+			}
+
+			byte++;
+		}
+
+		if (!separator)
+		{
+			return (kDataSyntaxError);
+		}
+
+		c = byte[0];
+	}
+
+	if ((c == 'e') || (c == 'E'))
+	{
+		bool negative = false;
+
+		c = (++byte)[0];
+		if (c == '-')
+		{
+			negative = true;
+			byte++;
+		}
+		else if (c == '+')
+		{
+			byte++;
+		}
+		else if (c - '0' >= 10U)
+		{
+			return (kDataFloatInvalid);
+		}
+
+		int32 exponent = 0;
+		bool digit = false;
+		separator = false;
+		for (;;)
+		{
+			unsigned_int32 x = byte[0] - '0';
+			if (x < 10U)
+			{
+				exponent = Min(exponent * 10 + x, 65535);
+				digit = true;
+				separator = true;
+			}
+			else
+			{
+				if ((x != 47) || (!separator))
+				{
+					break;
+				}
+
+				separator = false;
+			}
+
+			byte++;
+		}
+
+		if ((!digit) || (!separator))
+		{
+			return (kDataSyntaxError);
+		}
+
+		if (exponent != 0)
+		{
+			if (negative)
+			{
+				exponent = -exponent;
+			}
+
+			v *= exp((float) exponent * 2.3025850929940456840179914546844F);
+		}
+	}
+
+	unsigned_int32 f = *reinterpret_cast<unsigned_int32 *>(&v);
+	unsigned_int32 s = (f >> 16) & 0x8000;
+	unsigned_int32 m = (f >> 13) & 0x03FF;
+	int32 e = ((f >> 23) & 0xFF) - 127;
+
+	if (e >= -14)
+	{
+		if (e <= 15)
+		{
+			*value = (unsigned_int16) (s | ((e + 15) << 10) | m);
+		}
+		else
+		{
+			*value = (unsigned_int16) (s | 0x7C00);
+		}
+	}
+	else
+	{
+		*value = (unsigned_int16) s;
+	}
+
+	*textLength = (int32) (reinterpret_cast<const char *>(byte) - text);
+	return (kDataOkay);
+}
+
 DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, float *value)
 {
 	const unsigned_int8 *byte = reinterpret_cast<const unsigned_int8 *>(text);
@@ -795,6 +1116,24 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, float *
 			unsigned_int64		v;
 
 			DataResult result = ReadHexadecimalLiteral(text, textLength, &v);
+			if (result == kDataOkay)
+			{
+				if (v > 0x00000000FFFFFFFF)
+				{
+					return (kDataFloatOverflow);
+				}
+
+				*reinterpret_cast<unsigned_int32 *>(value) = (unsigned_int32) v;
+			}
+
+			return (result);
+		}
+
+		if ((c == 'o') || (c == 'O'))
+		{
+			unsigned_int64		v;
+
+			DataResult result = ReadOctalLiteral(text, textLength, &v);
 			if (result == kDataOkay)
 			{
 				if (v > 0x00000000FFFFFFFF)
@@ -828,17 +1167,31 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, float *
 	}
 
 	float v = 0.0F;
-
+	bool separator = false;
 	for (;;)
 	{
 		unsigned_int32 x = byte[0] - '0';
-		if (x >= 10U)
+		if (x < 10U)
 		{
-			break;
+			v = v * 10.0F + (float) x;
+			separator = true;
+		}
+		else
+		{
+			if ((x != 47) || (!separator))
+			{
+				break;
+			}
+
+			separator = false;
 		}
 
-		v = v * 10.0F + (float) x;
 		byte++;
+	}
+
+	if (!separator)
+	{
+		return (kDataSyntaxError);
 	}
 
 	c = byte[0];
@@ -847,17 +1200,32 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, float *
 		byte++;
 
 		float decimal = 10.0F;
+		separator = false;
 		for (;;)
 		{
 			unsigned_int32 x = byte[0] - '0';
-			if (x >= 10U)
+			if (x < 10U)
 			{
-				break;
+				v += (float) x / decimal;
+				decimal *= 10.0F;
+				separator = true;
+			}
+			else
+			{
+				if ((x != 47) || (!separator))
+				{
+					break;
+				}
+
+				separator = false;
 			}
 
-			v += (float) x / decimal;
-			decimal *= 10.0F;
 			byte++;
+		}
+
+		if (!separator)
+		{
+			return (kDataSyntaxError);
 		}
 
 		c = byte[0];
@@ -883,16 +1251,33 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, float *
 		}
 
 		int32 exponent = 0;
+		bool digit = false;
+		separator = false;
 		for (;;)
 		{
 			unsigned_int32 x = byte[0] - '0';
-			if (x >= 10U)
+			if (x < 10U)
 			{
-				break;
+				exponent = Min(exponent * 10 + x, 65535);
+				digit = true;
+				separator = true;
+			}
+			else
+			{
+				if ((x != 47) || (!separator))
+				{
+					break;
+				}
+
+				separator = false;
 			}
 
-			exponent = Min(exponent * 10 + x, 65535);
 			byte++;
+		}
+
+		if ((!digit) || (!separator))
+		{
+			return (kDataSyntaxError);
 		}
 
 		if (exponent != 0)
@@ -934,6 +1319,20 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, double 
 			return (result);
 		}
 
+		if ((c == 'o') || (c == 'O'))
+		{
+			unsigned_int64		v;
+
+			DataResult result = ReadOctalLiteral(text, textLength, &v);
+			if (result == kDataIntegerOverflow)
+			{
+				return (kDataFloatOverflow);
+			}
+
+			*reinterpret_cast<unsigned_int64 *>(value) = v;
+			return (result);
+		}
+
 		if ((c == 'b') || (c == 'B'))
 		{
 			unsigned_int64		v;
@@ -950,34 +1349,63 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, double 
 	}
 
 	double v = 0.0;
-
+	bool separator = false;
 	for (;;)
 	{
 		unsigned_int32 x = byte[0] - '0';
-		if (x >= 10U)
+		if (x < 10U)
 		{
-			break;
+			v = v * 10.0 + (double) x;
+			separator = true;
+		}
+		else
+		{
+			if ((x != 47) || (!separator))
+			{
+				break;
+			}
+
+			separator = false;
 		}
 
-		v = v * 10.0 + (double) x;
 		byte++;
+	}
+
+	if (!separator)
+	{
+		return (kDataSyntaxError);
 	}
 
 	c = byte[0];
 	if (c == '.')
 	{
 		double decimal = 10.0;
+		separator = false;
 		for (;;)
 		{
 			unsigned_int32 x = byte[0] - '0';
-			if (x >= 10U)
+			if (x < 10U)
 			{
-				break;
+				v += (double) x / decimal;
+				decimal *= 10.0;
+				separator = true;
+			}
+			else
+			{
+				if ((x != 47) || (!separator))
+				{
+					break;
+				}
+
+				separator = false;
 			}
 
-			v += (double) x / decimal;
-			decimal *= 10.0;
 			byte++;
+		}
+
+		if (!separator)
+		{
+			return (kDataSyntaxError);
 		}
 
 		c = byte[0];
@@ -1003,16 +1431,32 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, double 
 		}
 
 		int32 exponent = 0;
+		bool digit = false;
+		separator = false;
 		for (;;)
 		{
 			unsigned_int32 x = byte[0] - '0';
-			if (x >= 10U)
+			if (x < 10U)
 			{
-				break;
+				exponent = Min(exponent * 10 + x, 65535);
+				separator = true;
+			}
+			else
+			{
+				if ((x != 47) || (!separator))
+				{
+					break;
+				}
+
+				separator = false;
 			}
 
-			exponent = Min(exponent * 10 + x, 65535);
 			byte++;
+		}
+
+		if ((!digit) || (!separator))
+		{
+			return (kDataSyntaxError);
 		}
 
 		if (exponent != 0)
@@ -1341,6 +1785,33 @@ DataResult UnsignedInt64DataType::ParseValue(const char *& text, PrimType *value
 	}
 
 	*value = unsignedValue;
+
+	text += length;
+	text += Data::GetWhitespaceLength(text);
+
+	return (kDataOkay);
+}
+
+
+DataResult HalfDataType::ParseValue(const char *& text, PrimType *value)
+{
+	int32			length;
+	unsigned_int16	floatValue;
+
+	bool negative = Data::ParseSign(text);
+
+	DataResult result = Data::ReadFloatMagnitude(text, &length, &floatValue);
+	if (result != kDataOkay)
+	{
+		return (result);
+	}
+
+	if (negative)
+	{
+		floatValue ^= 0x8000;
+	}
+
+	*value = floatValue;
 
 	text += length;
 	text += Data::GetWhitespaceLength(text);
@@ -1745,7 +2216,29 @@ DataDescription::~DataDescription()
 {
 }
 
-Structure *DataDescription::ConstructPrimitive(const String& identifier)
+Structure *DataDescription::FindStructure(const StructureRef& reference) const
+{
+	if (reference.GetGlobalRefFlag())
+	{
+		const ImmutableArray<String>& nameArray = reference.GetNameArray();
+
+		int32 count = nameArray.GetElementCount();
+		if (count != 0)
+		{
+			Structure *structure = structureMap.Find(nameArray[0]);
+			if ((structure) && (count > 1))
+			{
+				structure = structure->FindStructure(reference, 1);
+			}
+
+			return (structure);
+		}
+	}
+
+	return (nullptr);
+}
+
+Structure *DataDescription::CreatePrimitive(const String& identifier)
 {
 	int32		length;
 	DataType	value;
@@ -1772,6 +2265,8 @@ Structure *DataDescription::ConstructPrimitive(const String& identifier)
 				return (new DataStructure<UnsignedInt32DataType>);
 			case kDataUnsignedInt64:
 				return (new DataStructure<UnsignedInt64DataType>);
+			case kDataHalf:
+				return (new DataStructure<HalfDataType>);
 			case kDataFloat:
 				return (new DataStructure<FloatDataType>);
 			case kDataDouble:
@@ -1788,7 +2283,7 @@ Structure *DataDescription::ConstructPrimitive(const String& identifier)
 	return (nullptr);
 }
 
-Structure *DataDescription::ConstructStructure(const String& identifier) const
+Structure *DataDescription::CreateStructure(const String& identifier) const
 {
 	return (nullptr);
 }
@@ -1801,28 +2296,6 @@ bool DataDescription::ValidateTopLevelStructure(const Structure *structure) cons
 DataResult DataDescription::ProcessData(void)
 {
 	return (rootStructure.ProcessData(this));
-}
-
-Structure *DataDescription::FindStructure(const StructureRef& reference) const
-{
-	if (reference.GetGlobalRefFlag())
-	{
-		const ImmutableArray<String>& nameArray = reference.GetNameArray();
-
-		int32 count = nameArray.GetElementCount();
-		if (count != 0)
-		{
-			Structure *structure = structureMap.Find(nameArray[0]);
-			if ((structure) && (count > 1))
-			{
-				structure = structure->FindStructure(reference, 1);
-			}
-
-			return (structure);
-		}
-	}
-
-	return (nullptr);
 }
 
 DataResult DataDescription::ParseProperties(const char *& text, Structure *structure)
@@ -1891,6 +2364,9 @@ DataResult DataDescription::ParseProperties(const char *& text, Structure *struc
 			case kDataUnsignedInt64:
 				result = UnsignedInt64DataType::ParseValue(text, static_cast<UnsignedInt64DataType::PrimType *>(value));
 				break;
+			case kDataHalf:
+				result = HalfDataType::ParseValue(text, static_cast<HalfDataType::PrimType *>(value));
+				break;
 			case kDataFloat:
 				result = FloatDataType::ParseValue(text, static_cast<FloatDataType::PrimType *>(value));
 				break;
@@ -1948,14 +2424,14 @@ DataResult DataDescription::ParseStructures(const char *& text, Structure *root)
 
 		bool primitive = false;
 
-		Structure *structure = ConstructPrimitive(identifier);
+		Structure *structure = CreatePrimitive(identifier);
 		if (structure)
 		{
 			primitive = true;
 		}
 		else
 		{
-			structure = ConstructStructure(identifier);
+			structure = CreateStructure(identifier);
 			if (!structure)
 			{
 				return (kDataStructUndefined);
@@ -2015,8 +2491,6 @@ DataResult DataDescription::ParseStructures(const char *& text, Structure *root)
 		char c = text[0];
 		if ((unsigned_int32) (c - '$') < 2U)
 		{
-			MapReservation		reservation;
-
 			text++;
 
 			result = Data::ReadIdentifier(text, &length);
@@ -2031,12 +2505,10 @@ DataResult DataDescription::ParseStructures(const char *& text, Structure *root)
 			structure->globalNameFlag = global;
 
 			Map<Structure> *map = (global) ? &structureMap : &root->structureMap;
-			if (!map->Reserve(structure->GetKey(), &reservation))
+			if (!map->Insert(structure))
 			{
 				return (kDataStructNameExists);
 			}
-
-			map->Insert(structure, &reservation);
 
 			text += length;
 			text += Data::GetWhitespaceLength(text);

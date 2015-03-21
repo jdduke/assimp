@@ -2,8 +2,8 @@
 	OpenDDL Library Software License
 	==================================
 
-	OpenDDL Library, version 1.0
-	Copyright 2014, Eric Lengyel
+	OpenDDL Library, version 1.1
+	Copyright 2014-2015, Eric Lengyel
 	All rights reserved.
 
 	The OpenDDL Library is free software published on the following website:
@@ -67,14 +67,14 @@ namespace ODDL
 	};
 
 
-	enum : StructureType
+	enum
 	{
 		kStructureRoot						= 0,
 		kStructurePrimitive					= 'PRIM'
 	};
 
 
-	enum : DataType
+	enum
 	{
 		kDataBool							= 'BOOL',		//## Boolean.
 		kDataInt8							= 'INT8',		//## 8-bit signed integer.
@@ -85,6 +85,7 @@ namespace ODDL
 		kDataUnsignedInt16					= 'UI16',		//## 16-bit unsigned integer.
 		kDataUnsignedInt32					= 'UI32',		//## 32-bit unsigned integer.
 		kDataUnsignedInt64					= 'UI64',		//## 64-bit unsigned integer.
+		kDataHalf							= 'HALF',		//## 16-bit floating-point.
 		kDataFloat							= 'FLOT',		//## 32-bit floating-point.
 		kDataDouble							= 'DOUB',		//## 64-bit floating-point.
 		kDataString							= 'STRG',		//## String.
@@ -93,7 +94,7 @@ namespace ODDL
 	};
 
 
-	enum : DataResult
+	enum
 	{
 		kDataOkay							= 0,
 		kDataSyntaxError					= 'SYNT',		//## The syntax is invalid.
@@ -126,7 +127,7 @@ namespace ODDL
 	};
 
 
-	enum : DataResult
+	enum
 	{
 		kDataMissingSubstructure			= 'MSSB',		//## A structure is missing a substructure of a required type.
 		kDataExtraneousSubstructure			= 'EXSB',		//## A structure contains too many substructures of a legal type.
@@ -148,6 +149,7 @@ namespace ODDL
 		DataResult ReadStringLiteral(const char *text, int32 *textLength, int32 *stringLength, char *restrict string = nullptr);
 		DataResult ReadBoolLiteral(const char *text, int32 *textLength, bool *value);
 		DataResult ReadUnsignedLiteral(const char *text, int32 *textLength, unsigned_int64 *value);
+		DataResult ReadFloatMagnitude(const char *text, int32 *textLength, unsigned_int16 *value);
 		DataResult ReadFloatMagnitude(const char *text, int32 *textLength, float *value);
 		DataResult ReadFloatMagnitude(const char *text, int32 *textLength, double *value);
 	}
@@ -266,9 +268,16 @@ namespace ODDL
 				return (globalRefFlag);
 			}
 
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 			void AddName(String&& name)
 			{
 				nameArray.AddElement(static_cast<String&&>(name));
+			}
+#endif
+
+			void AddName(const String& name)
+			{
+				nameArray.AddElement(name);
 			}
 
 			void Reset(bool global = true);
@@ -392,6 +401,19 @@ namespace ODDL
 	};
 
 
+	struct HalfDataType
+	{
+		typedef unsigned_int16 PrimType;
+
+		enum
+		{
+			kStructureType = kDataHalf
+		};
+
+		static DataResult ParseValue(const char *& text, PrimType *value);
+	};
+
+
 	struct FloatDataType
 	{
 		typedef float PrimType;
@@ -479,7 +501,7 @@ namespace ODDL
 	//# type $@PrimitiveStructure@$ that is a direct subclass of the $Structure$ class.
 	//#
 	//# Custom data structures defined by specific OpenDDL-based file formats are represented by application-defined
-	//# subclasses of the $Structure$ class. When an OpenDDL file is parsed, the $@DataDescription::ConstructStructure@$
+	//# subclasses of the $Structure$ class. When an OpenDDL file is parsed, the $@DataDescription::CreateStructure@$
 	//# function is called to construct the proper subclass for a given type identifier.
 	//#
 	//# $Structure$ objects are organized into a tree hierarchy that can be traversed using the functions of the
@@ -656,7 +678,7 @@ namespace ODDL
 	//
 	//# \desc
 	//# The $ValidateSubstructure$ function is called for the $Structure$ object representing the enclosing data
-	//# structure each time a new substructure is constructed to determine whether the new substructure can legally
+	//# structure each time a new substructure is created to determine whether the new substructure can legally
 	//# be contained in the data of the $Structure$ object. An overriding implementation should examine the
 	//# structure specified by the $structure$ parameter and return $true$ if it can legally appear as a direct
 	//# subnode of the $Structure$ object for which the $ValidateSubstructure$ function is called. Otherwise, the
@@ -851,7 +873,7 @@ namespace ODDL
 	//
 	//# The $DataStructure$ class template represents each of the specific built-in primitive data structure in an OpenDDL file.
 	//
-	//# \def	template <class type> class DataStructure final : public PrimitiveStructure
+	//# \def	template <class type> class DataStructure : public PrimitiveStructure
 	//
 	//# \tparam		type	An object type representing the specific type of data contained in the structure.
 	//
@@ -870,6 +892,7 @@ namespace ODDL
 	//# \value	UnsignedInt16DataType	A 16-bit unsigned integer that can have values in the range [0,&nbsp;65535].
 	//# \value	UnsignedInt32DataType	A 32-bit unsigned integer that can have values in the range [0,&nbsp;4294967295].
 	//# \value	UnsignedInt64DataType	A 64-bit unsigned integer that can have values in the range [0,&nbsp;18446744073709551615].
+	//# \value	HalfDataType			A 16-bit floating-point type conforming to the standard S1E5M10 format.
 	//# \value	FloatDataType			A 32-bit floating-point type conforming to the standard S1E8M23 format.
 	//# \value	DoubleDataType			A 64-bit floating-point type conforming to the standard S1E11M52 format.
 	//# \value	StringDataType			A double-quoted character string with contents encoded in UTF-8.
@@ -941,7 +964,7 @@ namespace ODDL
 	//# \also	$@PrimitiveStructure::GetArraySize@$
 
 
-	template <class type> class DataStructure final : public PrimitiveStructure
+	template <class type> class DataStructure : public PrimitiveStructure
 	{
 		private:
 
@@ -969,7 +992,7 @@ namespace ODDL
 				return (&dataArray[GetArraySize() * index]);
 			}
 
-			DataResult ParseData(const char *& text) override;
+			DataResult ParseData(const char *& text);
 	};
 
 
@@ -980,7 +1003,7 @@ namespace ODDL
 			RootStructure();
 			~RootStructure();
 
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
 	};
 
 
@@ -1000,7 +1023,7 @@ namespace ODDL
 	//# in an OpenDDL file.
 	//#
 	//# A subclass of the $DataDescription$ class represents a specific OpenDDL-based file format and provides the means for
-	//# constructing custom $@Structure@$ subclasses by overriding the $@DataDescription::ConstructStructure@$ function.
+	//# constructing custom $@Structure@$ subclasses by overriding the $@DataDescription::CreateStructure@$ function.
 	//
 	//# \also	$@Structure@$
 	//# \also	$@PrimitiveStructure@$
@@ -1046,16 +1069,16 @@ namespace ODDL
 	//# \also	$@DataDescription::GetRootStructure@$
 
 
-	//# \function	DataDescription::ConstructStructure		Constructs a custom data structure.
+	//# \function	DataDescription::CreateStructure		Constructs a custom data structure.
 	//
-	//# \proto	virtual Structure *ConstructStructure(const String& identifier) const;
+	//# \proto	virtual Structure *CreateStructure(const String& identifier) const;
 	//
 	//# \param	identifier		The identifier of a data structure in an OpenDDL file.
 	//
 	//# \desc
-	//# The $ConstructStructure$ function should be overridden by any subclass of the $DataDescription$ class
+	//# The $CreateStructure$ function should be overridden by any subclass of the $DataDescription$ class
 	//# representing a file format that defines custom data structures. The implementation should use the $new$
-	//# operator to construct a new object based on the $Structure$ subclass corresponding to the $identifier$
+	//# operator to create a new object based on the $Structure$ subclass corresponding to the $identifier$
 	//# parameter. If the identifier is not recognized, then this function should return $nullptr$. The default
 	//# implementation always returns $nullptr$.
 	//
@@ -1069,7 +1092,7 @@ namespace ODDL
 	//# \param	structure		The top-level structure to validate.
 	//
 	//# \desc
-	//# The $ValidateTopLevelStructure$ function is called each time a new structure is constructed at the top level
+	//# The $ValidateTopLevelStructure$ function is called each time a new structure is created at the top level
 	//# of an OpenDDL file to determine whether the new structure can legally appear outside all other structures.
 	//# An overriding implementation should examine the structure specified by the $structure$ parameter and return
 	//# $true$ if it can legally appear at the top level of a file, and it should return $false$ otherwise.
@@ -1097,8 +1120,8 @@ namespace ODDL
 	//
 	//# \table	DataResult
 	//
-	//# During the parsing stage, the $@DataDescription::ConstructStructure@$ is called for each custom data structure
-	//# that is encountered in order to construct an object whose type is the proper subclass of the $@Structure@$ class.
+	//# During the parsing stage, the $@DataDescription::CreateStructure@$ is called for each custom data structure
+	//# that is encountered in order to create an object whose type is the proper subclass of the $@Structure@$ class.
 	//
 	//# After a successful parse, the $ProcessText$ function iterates through all of the top-level data structures in
 	//# the file (which are the direct subnodes of the root structure returned by the $@DataDescription::GetRootStructure@$
@@ -1114,13 +1137,13 @@ namespace ODDL
 	//# occurred can be retrieved by calling the $@DataDescription::GetErrorLine@$ function.
 	//#
 	//# The default implementation of the $@Structure::ProcessData@$ function iterates over the direct subnodes of a
-	//# data structure and calls the $ProcessData$ function for each one. If all overrides call the base class implementation,
+	//# data structure and calls the $ProcessData$ function for each one. If alls call the base class implementation,
 	//# then the entire tree of data structures will be visited during the processing stage.
 	//#
 	//# Any implementation of the $@Structure::ProcessData@$ function may make the following assumptions about the data:
 	//#
 	//# 1. The input text is syntactically valid.<br/>
-	//# 2. Each structure described in the input text was recognized and successfully constructed.<br/>
+	//# 2. Each structure described in the input text was recognized and successfully created.<br/>
 	//# 3. Each structure is valid as indicated by the $@Structure::ValidateSubstructure@$ function called for its enclosing structure.<br/>
 	//# 4. Each property identifier is valid as indicated by the $@Structure::ValidateProperty@$ function called for the associated structure, and it has a value of the proper type assigned to it.<br/>
 	//# 5. Any existing subarrays of primitive data have the correct number of elements, matching the number specified in brackets after the primitive type identifier.
@@ -1153,7 +1176,7 @@ namespace ODDL
 			const Structure		*errorStructure;
 			int32				errorLine;
 
-			static Structure *ConstructPrimitive(const String& identifier);
+			static Structure *CreatePrimitive(const String& identifier);
 
 			DataResult ParseProperties(const char *& text, Structure *structure);
 			DataResult ParseStructures(const char *& text, Structure *root);
@@ -1161,6 +1184,8 @@ namespace ODDL
 		protected:
 
 			DataDescription();
+
+			virtual DataResult ProcessData(void);
 
 		public:
 
@@ -1176,11 +1201,10 @@ namespace ODDL
 				return (errorLine);
 			}
 
-			virtual Structure *ConstructStructure(const String& identifier) const;
-			virtual bool ValidateTopLevelStructure(const Structure *structure) const;
-			virtual DataResult ProcessData(void);
-
 			Structure *FindStructure(const StructureRef& reference) const;
+
+			virtual Structure *CreateStructure(const String& identifier) const;
+			virtual bool ValidateTopLevelStructure(const Structure *structure) const;
 
 			DataResult ProcessText(const char *text);
 	};

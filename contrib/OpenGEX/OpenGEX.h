@@ -2,8 +2,8 @@
 	OpenGEX Import Template Software License
 	==========================================
 
-	OpenGEX Import Template, version 1.0
-	Copyright 2014, Eric Lengyel
+	OpenGEX Import Template, version 1.1.2
+	Copyright 2014-2015, Eric Lengyel
 	All rights reserved.
 
 	The OpenGEX Import Template is free software published on the following website:
@@ -45,7 +45,7 @@
 #define OpenGEX_h
 
 
-#include "OpenDDL/OpenDDL.h"
+#include "OpenDDL.h"
 
 
 using namespace ODDL;
@@ -56,45 +56,48 @@ namespace OGEX
 	enum
 	{
 		kStructureMetric						= 'mtrc',
-		kStructureVertexArray					= 'vert',
-		kStructureIndexArray					= 'indx',
-		kStructureMesh							= 'mesh',
-		kStructureNode							= 'node',
-		kStructureBoneNode						= 'bnnd',
-		kStructureGeometryNode					= 'gmnd',
-		kStructureLightNode						= 'ltnd',
-		kStructureCameraNode					= 'cmnd',
-		kStructureObject						= 'objc',
-		kStructureGeometryObject				= 'gmob',
-		kStructureLightObject					= 'ltob',
-		kStructureCameraObject					= 'cmob',
+		kStructureName							= 'name',
+		kStructureObjectRef						= 'obrf',
+		kStructureMaterialRef					= 'mtrf',
 		kStructureMatrix						= 'mtrx',
 		kStructureTransform						= 'xfrm',
 		kStructureTranslation					= 'xslt',
 		kStructureRotation						= 'rota',
 		kStructureScale							= 'scal',
-		kStructureName							= 'name',
-		kStructureObjectRef						= 'obrf',
-		kStructureMaterialRef					= 'mtrf',
-		kStructureMorph							= 'mrph',
+		kStructureMorphWeight					= 'mwgt',
+		kStructureNode							= 'node',
+		kStructureBoneNode						= 'bnnd',
+		kStructureGeometryNode					= 'gmnd',
+		kStructureLightNode						= 'ltnd',
+		kStructureCameraNode					= 'cmnd',
+		kStructureVertexArray					= 'vert',
+		kStructureIndexArray					= 'indx',
 		kStructureBoneRefArray					= 'bref',
 		kStructureBoneCountArray				= 'bcnt',
 		kStructureBoneIndexArray				= 'bidx',
 		kStructureBoneWeightArray				= 'bwgt',
 		kStructureSkeleton						= 'skel',
 		kStructureSkin							= 'skin',
-		kStructureMaterial						= 'matl',
+		kStructureMorph							= 'mrph',
+		kStructureMesh							= 'mesh',
+		kStructureObject						= 'objc',
+		kStructureGeometryObject				= 'gmob',
+		kStructureLightObject					= 'ltob',
+		kStructureCameraObject					= 'cmob',
 		kStructureAttrib						= 'attr',
 		kStructureParam							= 'parm',
 		kStructureColor							= 'colr',
 		kStructureTexture						= 'txtr',
 		kStructureAtten							= 'attn',
+		kStructureMaterial						= 'matl',
 		kStructureKey							= 'key ',
 		kStructureCurve							= 'curv',
 		kStructureTime							= 'time',
 		kStructureValue							= 'valu',
 		kStructureTrack							= 'trac',
-		kStructureAnimation						= 'anim'
+		kStructureAnimation						= 'anim',
+		kStructureClip							= 'clip',
+		kStructureExtension						= 'extn'
 	};
 
 
@@ -106,8 +109,9 @@ namespace OGEX
 		kDataOpenGexInvalidScaleKind			= 'ivsk',
 		kDataOpenGexDuplicateLod				= 'dlod',
 		kDataOpenGexMissingLodSkin				= 'mlsk',
+		kDataOpenGexMissingLodMorph				= 'mlmp',
+		kDataOpenGexDuplicateMorph				= 'dmph',
 		kDataOpenGexUndefinedLightType			= 'ivlt',
-		kDataOpenGexUndefinedAttrib				= 'udab',
 		kDataOpenGexUndefinedCurve				= 'udcv',
 		kDataOpenGexUndefinedAtten				= 'udan',
 		kDataOpenGexDuplicateVertexArray		= 'dpva',
@@ -133,16 +137,32 @@ namespace OGEX
 	};
 
 
+	class MaterialStructure;
 	class ObjectStructure;
 	class GeometryObjectStructure;
 	class LightObjectStructure;
 	class CameraObjectStructure;
-	class SkinStructure;
-	class MaterialStructure;
 	class OpenGexDataDescription;
 
 
-	class MetricStructure : public Structure
+	class OpenGexStructure : public Structure
+	{
+		protected:
+
+			OpenGexStructure(StructureType type);
+
+		public:
+
+			~OpenGexStructure();
+
+			Structure *GetFirstCoreSubnode(void) const;
+			Structure *GetLastCoreSubnode(void) const;
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+	};
+
+
+	class MetricStructure : public OpenGexStructure
 	{
 		private:
 
@@ -153,19 +173,375 @@ namespace OGEX
 			MetricStructure();
 			~MetricStructure();
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			const String& GetMetricKey(void) const
+			{
+				return (metricKey);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class VertexArrayStructure : public Structure
+	class NameStructure : public OpenGexStructure
+	{
+		private:
+
+			const char		*name;
+
+		public:
+
+			NameStructure();
+			~NameStructure();
+
+			const char *GetName(void) const
+			{
+				return (name);
+			}
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class ObjectRefStructure : public OpenGexStructure
+	{
+		private:
+
+			Structure		*targetStructure;
+
+		public:
+
+			ObjectRefStructure();
+			~ObjectRefStructure();
+
+			Structure *GetTargetStructure(void) const
+			{
+				return (targetStructure);
+			}
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class MaterialRefStructure : public OpenGexStructure
+	{
+		private:
+
+			unsigned_int32				materialIndex;
+			const MaterialStructure		*targetStructure;
+
+		public:
+
+			MaterialRefStructure();
+			~MaterialRefStructure();
+
+			unsigned_int32 GetMaterialIndex(void) const
+			{
+				return (materialIndex);
+			}
+
+			const MaterialStructure *GetTargetStructure(void) const
+			{
+				return (targetStructure);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class AnimatableStructure : public OpenGexStructure
+	{
+		protected:
+
+			AnimatableStructure(StructureType type);
+			~AnimatableStructure();
+	};
+
+
+	class MatrixStructure : public AnimatableStructure
+	{
+		private:
+
+			bool		objectFlag;
+
+		protected:
+
+			MatrixStructure(StructureType type);
+
+		public:
+
+			~MatrixStructure();
+
+			bool GetObjectFlag(void) const
+			{
+				return (objectFlag);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+	};
+
+
+	class TransformStructure : public MatrixStructure
+	{
+		private:
+
+			int32			transformCount;
+			const float		*transformArray;
+
+		public:
+
+			TransformStructure();
+			~TransformStructure();
+
+			int32 GetTransformCount(void) const
+			{
+				return (transformCount);
+			}
+
+			const float *GetTransform(int32 index = 0) const
+			{
+				return (&transformArray[index * 16]);
+			}
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class TranslationStructure : public MatrixStructure
+	{
+		private:
+
+			String		translationKind;
+			const float		*data;
+
+		public:
+
+			TranslationStructure();
+			~TranslationStructure();
+
+			const String& GetTranslationKind(void) const
+			{
+				return (translationKind);
+			}
+
+			const float *GetData() const
+			{
+				return data;
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class RotationStructure : public MatrixStructure
+	{
+		private:
+
+			String		rotationKind;
+			const float		*data;
+
+		public:
+
+			RotationStructure();
+			~RotationStructure();
+
+			const String& GetRotationKind(void) const
+			{
+				return (rotationKind);
+			}
+
+			const float *GetData() const
+			{
+				return data;
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class ScaleStructure : public MatrixStructure
+	{
+		private:
+
+			String		scaleKind;
+			const float		*data;
+
+		public:
+
+			ScaleStructure();
+			~ScaleStructure();
+
+			const String& GetScaleKind(void) const
+			{
+				return (scaleKind);
+			}
+
+			const float *GetData() const
+			{
+				return data;
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class MorphWeightStructure : public AnimatableStructure
+	{
+		private:
+
+			unsigned_int32		morphIndex;
+			float				morphWeight;
+
+		public:
+
+			MorphWeightStructure();
+			~MorphWeightStructure();
+
+			unsigned_int32 GetMorphIndex(void) const
+			{
+				return (morphIndex);
+			}
+
+			float GetMorphWeight(void) const
+			{
+				return (morphWeight);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class NodeStructure : public OpenGexStructure
+	{
+		private:
+
+			const char		*nodeName;
+
+			void CalculateTransforms(const OpenGexDataDescription *dataDescription);
+
+		protected:
+
+			NodeStructure(StructureType type);
+
+		public:
+
+			NodeStructure();
+			~NodeStructure();
+
+			const char *GetNodeName(void) const
+			{
+				return (nodeName);
+			}
+
+			virtual const ObjectStructure *GetObjectStructure(void) const;
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class BoneNodeStructure : public NodeStructure
+	{
+		public:
+
+			BoneNodeStructure();
+			~BoneNodeStructure();
+	};
+
+
+	class GeometryNodeStructure : public NodeStructure
+	{
+		private:
+
+			bool		visibleFlag[2];
+			bool		shadowFlag[2];
+			bool		motionBlurFlag[2];
+
+			GeometryObjectStructure					*geometryObjectStructure;
+			Array<const MaterialStructure *, 4>		materialStructureArray;
+
+			const ObjectStructure *GetObjectStructure(void) const;
+
+		public:
+
+			GeometryNodeStructure();
+			~GeometryNodeStructure();
+
+			const GeometryObjectStructure* GetGeometryObjectStructure() const
+			{
+				return (geometryObjectStructure);
+			}
+
+			const Array<const MaterialStructure*, 4>& GetMaterialStructureArray() const
+			{
+				return (materialStructureArray);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class LightNodeStructure : public NodeStructure
+	{
+		private:
+
+			bool		shadowFlag[2];
+
+			const LightObjectStructure		*lightObjectStructure;
+
+			const ObjectStructure *GetObjectStructure(void) const;
+
+		public:
+
+			LightNodeStructure();
+			~LightNodeStructure();
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class CameraNodeStructure : public NodeStructure
+	{
+		private:
+
+			const CameraObjectStructure		*cameraObjectStructure;
+
+			const ObjectStructure *GetObjectStructure(void) const;
+
+		public:
+
+			CameraNodeStructure();
+			~CameraNodeStructure();
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class VertexArrayStructure : public OpenGexStructure
 	{
 		private:
 
 			String				arrayAttrib;
 			unsigned_int32		morphIndex;
-
 			const DataStructure<FloatDataType>	*dataStructure;
 
 		public:
@@ -175,7 +551,7 @@ namespace OGEX
 
 			const String& GetArrayAttrib(void) const
 			{
-				return arrayAttrib;
+				return (arrayAttrib);
 			}
 
 			unsigned_int32 GetMorphIndex(void) const
@@ -188,20 +564,19 @@ namespace OGEX
 				return (dataStructure);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class IndexArrayStructure : public Structure
+	class IndexArrayStructure : public OpenGexStructure
 	{
 		private:
 
 			unsigned_int32			materialIndex;
 			unsigned_int64			restartIndex;
 			String					frontFace;
-
 			const PrimitiveStructure	*primitiveStructure;
 
 		public:
@@ -229,20 +604,228 @@ namespace OGEX
 				return (primitiveStructure);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class MeshStructure : public Structure, public MapElement<MeshStructure>
+	class BoneRefArrayStructure : public OpenGexStructure
 	{
 		private:
 
-			unsigned_int32					meshLevel;
-			String							meshPrimitive;
+			int32						boneCount;
+			const BoneNodeStructure		**boneNodeArray;
 
-			SkinStructure					*skinStructure;
+		public:
+
+			BoneRefArrayStructure();
+			~BoneRefArrayStructure();
+
+			int32 GetBoneCount(void) const
+			{
+				return (boneCount);
+			}
+
+			const BoneNodeStructure *const *GetBoneNodeArray(void) const
+			{
+				return (boneNodeArray);
+			}
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class BoneCountArrayStructure : public OpenGexStructure
+	{
+		private:
+
+			int32					vertexCount;
+			const unsigned_int16	*boneCountArray;
+			unsigned_int16			*arrayStorage;
+
+		public:
+
+			BoneCountArrayStructure();
+			~BoneCountArrayStructure();
+
+			int32 GetVertexCount(void) const
+			{
+				return (vertexCount);
+			}
+
+			const unsigned_int16 *GetBoneCountArray(void) const
+			{
+				return (boneCountArray);
+			}
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class BoneIndexArrayStructure : public OpenGexStructure
+	{
+		private:
+
+			int32					boneIndexCount;
+			const unsigned_int16	*boneIndexArray;
+			unsigned_int16			*arrayStorage;
+
+		public:
+
+			BoneIndexArrayStructure();
+			~BoneIndexArrayStructure();
+
+			int32 GetBoneIndexCount(void) const
+			{
+				return (boneIndexCount);
+			}
+
+			const unsigned_int16 *GetBoneIndexArray(void) const
+			{
+				return (boneIndexArray);
+			}
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class BoneWeightArrayStructure : public OpenGexStructure
+	{
+		private:
+
+			int32			boneWeightCount;
+			const float		*boneWeightArray;
+
+		public:
+
+			BoneWeightArrayStructure();
+			~BoneWeightArrayStructure();
+
+			int32 GetBoneWeightCount(void) const
+			{
+				return (boneWeightCount);
+			}
+
+			const float *GetBoneWeightArray(void) const
+			{
+				return (boneWeightArray);
+			}
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class SkeletonStructure : public OpenGexStructure
+	{
+		private:
+
+			const BoneRefArrayStructure		*boneRefArrayStructure;
+			const TransformStructure		*transformStructure;
+
+		public:
+
+			SkeletonStructure();
+			~SkeletonStructure();
+
+			const BoneRefArrayStructure *GetBoneRefArrayStructure(void) const
+			{
+				return (boneRefArrayStructure);
+			}
+
+			const TransformStructure *GetTransformStructure(void) const
+			{
+				return (transformStructure);
+			}
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class SkinStructure : public OpenGexStructure
+	{
+		private:
+
+			const SkeletonStructure				*skeletonStructure;
+			const BoneCountArrayStructure		*boneCountArrayStructure;
+			const BoneIndexArrayStructure		*boneIndexArrayStructure;
+			const BoneWeightArrayStructure		*boneWeightArrayStructure;
+
+		public:
+
+			SkinStructure();
+			~SkinStructure();
+
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class MorphStructure : public OpenGexStructure, public MapElement<MorphStructure>
+	{
+		private:
+
+			unsigned_int32		morphIndex;
+
+			bool				baseFlag;
+			unsigned_int32		baseIndex;
+
+			const char			*morphName;
+
+		public:
+
+			typedef unsigned_int32 KeyType;
+
+			MorphStructure();
+			~MorphStructure();
+
+			using MapElement<MorphStructure>::Previous;
+			using MapElement<MorphStructure>::Next;
+
+			KeyType GetKey(void) const
+			{
+				return (morphIndex);
+			}
+
+			unsigned_int32 GetMorphIndex(void) const
+			{
+				return (morphIndex);
+			}
+
+			bool GetBaseFlag(void) const
+			{
+				return (baseFlag);
+			}
+
+			unsigned_int32 GetBaseIndex(void) const
+			{
+				return (baseIndex);
+			}
+
+			const char *GetMorphName(void) const
+			{
+				return (morphName);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class MeshStructure : public OpenGexStructure, public MapElement<MeshStructure>
+	{
+		private:
+
+			unsigned_int32			meshLevel;
+			String					meshPrimitive;
+
+			SkinStructure			*skinStructure;
 
 		public:
 
@@ -259,6 +842,11 @@ namespace OGEX
 				return (meshLevel);
 			}
 
+			unsigned_int32 GetMeshLevel(void) const
+			{
+				return (meshLevel);
+			}
+
 			const String& GetMeshPrimitive(void) const
 			{
 				return (meshPrimitive);
@@ -269,124 +857,13 @@ namespace OGEX
 				return (skinStructure);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class NodeStructure : public Structure
-	{
-		private:
-
-			const char			*nodeName;
-
-			void CalculateTransforms(const OpenGexDataDescription *dataDescription);
-
-		protected:
-
-			NodeStructure(StructureType type);
-
-		public:
-
-			NodeStructure();
-			~NodeStructure();
-
-			const char* GetNodeName(void) const
-			{
-				return (nodeName);
-			}
-
-			virtual const ObjectStructure *GetObjectStructure(void) const;
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class BoneNodeStructure : public NodeStructure
-	{
-		public:
-
-			BoneNodeStructure();
-			~BoneNodeStructure();
-	};
-
-
-	class GeometryNodeStructure : public NodeStructure
-	{
-		private:
-
-			bool		visibleFlag[2];
-			bool		shadowFlag[2];
-			bool		motionBlurFlag[2];
-
-			GeometryObjectStructure					*geometryObjectStructure;
-			Array<const MaterialStructure *, 4>		materialStructureArray;
-
-			const ObjectStructure *GetObjectStructure(void) const override;
-
-		public:
-
-			GeometryNodeStructure();
-			~GeometryNodeStructure();
-
-			const GeometryObjectStructure* GetGeometryObjectStructure() const
-			{
-				return (geometryObjectStructure);
-			}
-
-			const Array<const MaterialStructure*, 4>& GetMaterialStructureArray() const
-			{
-				return (materialStructureArray);
-			}
-
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class LightNodeStructure : public NodeStructure
-	{
-		private:
-
-			bool		shadowFlag[2];
-
-			const LightObjectStructure		*lightObjectStructure;
-
-			const ObjectStructure *GetObjectStructure(void) const override;
-
-		public:
-
-			LightNodeStructure();
-			~LightNodeStructure();
-
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class CameraNodeStructure : public NodeStructure
-	{
-		private:
-
-			const CameraObjectStructure		*cameraObjectStructure;
-
-			const ObjectStructure *GetObjectStructure(void) const override;
-
-		public:
-
-			CameraNodeStructure();
-			~CameraNodeStructure();
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class ObjectStructure : public Structure
+	class ObjectStructure : public OpenGexStructure
 	{
 		protected:
 
@@ -407,20 +884,41 @@ namespace OGEX
 			bool					motionBlurFlag;
 
 			Map<MeshStructure>		meshMap;
+			Map<MorphStructure>		morphMap;
 
 		public:
 
 			GeometryObjectStructure();
 			~GeometryObjectStructure();
 
+			bool GetVisibleFlag(void) const
+			{
+				return (visibleFlag);
+			}
+
+			bool GetShadowFlag(void) const
+			{
+				return (shadowFlag);
+			}
+
+			bool GetMotionBlurFlag(void) const
+			{
+				return (motionBlurFlag);
+			}
+
 			const Map<MeshStructure> *GetMeshMap(void) const
 			{
 				return (&meshMap);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			const Map<MorphStructure> *GetMorphMap(void) const
+			{
+				return (&morphMap);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
@@ -436,14 +934,19 @@ namespace OGEX
 			LightObjectStructure();
 			~LightObjectStructure();
 
+			const String& GetTypeString(void) const
+			{
+				return (typeString);
+			}
+
 			bool GetShadowFlag(void) const
 			{
 				return (shadowFlag);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
@@ -475,433 +978,12 @@ namespace OGEX
 				return (farDepth);
 			}
 
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class AnimatableStructure : public Structure
-	{
-		protected:
-
-			AnimatableStructure(StructureType type);
-			~AnimatableStructure();
-	};
-
-
-	class MatrixStructure : public AnimatableStructure
-	{
-		private:
-
-			bool		objectFlag;
-
-		protected:
-
-			MatrixStructure(StructureType type);
-
-		public:
-
-			~MatrixStructure();
-
-			bool GetObjectFlag(void) const
-			{
-				return (objectFlag);
-			}
-
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-	};
-
-
-	class TransformStructure final : public MatrixStructure
-	{
-		private:
-
-			int32			transformCount;
-			const float		*transformArray;
-
-		public:
-
-			TransformStructure();
-			~TransformStructure();
-
-			int32 GetTransformCount(void) const
-			{
-				return (transformCount);
-			}
-
-			const float *GetTransform(int32 index = 0) const
-			{
-				return (&transformArray[index * 16]);
-			}
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-
-
-	class TranslationStructure final : public MatrixStructure
-	{
-		private:
-
-			String		translationKind;
-			const float		*data;
-
-		public:
-
-			TranslationStructure();
-			~TranslationStructure();
-
-			const String& GetTranslationKind(void) const
-			{
-				return (translationKind);
-			}
-
-			const float *GetData() const
-			{
-				return data;
-			}
-
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class RotationStructure final : public MatrixStructure
-	{
-		private:
-
-			String		rotationKind;
-			const float		*data;
-
-		public:
-
-			RotationStructure();
-			~RotationStructure();
-
-			const String& GetRotationKind(void) const
-			{
-				return (rotationKind);
-			}
-
-			const float *GetData() const
-			{
-				return data;
-			}
-
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class ScaleStructure final : public MatrixStructure
-	{
-		private:
-
-			String		scaleKind;
-			const float		*data;
-
-		public:
-
-			ScaleStructure();
-			~ScaleStructure();
-
-			const String& GetScaleKind(void) const
-			{
-				return (scaleKind);
-			}
-
-			const float *GetData() const
-			{
-				return data;
-			}
-
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class NameStructure : public Structure
-	{
-		private:
-
-			const char		*name;
-
-		public:
-
-			NameStructure();
-			~NameStructure();
-
-			const char *GetName(void) const
-			{
-				return (name);
-			}
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class ObjectRefStructure : public Structure
-	{
-		private:
-
-			Structure		*targetStructure;
-
-		public:
-
-			ObjectRefStructure();
-			~ObjectRefStructure();
-
-			Structure *GetTargetStructure(void) const
-			{
-				return (targetStructure);
-			}
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class MaterialRefStructure : public Structure
-	{
-		private:
-
-			unsigned_int32				materialIndex;
-			const MaterialStructure		*targetStructure;
-
-		public:
-
-			MaterialRefStructure();
-			~MaterialRefStructure();
-
-			unsigned_int32 GetMaterialIndex(void) const
-			{
-				return (materialIndex);
-			}
-
-			const MaterialStructure *GetTargetStructure(void) const
-			{
-				return (targetStructure);
-			}
-
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class MorphStructure : public AnimatableStructure
-	{
-		private:
-
-			int32		morphWeightCount;
-			float		*morphWeightArray;
-
-		public:
-
-			MorphStructure();
-			~MorphStructure();
-
-			int32 GetMorphWeightCount(void) const
-			{
-				return (morphWeightCount);
-			}
-
-			const float *GetMorphWeightArray(void) const
-			{
-				return (morphWeightArray);
-			}
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class BoneRefArrayStructure : public Structure
-	{
-		private:
-
-			int32						boneCount;
-			const BoneNodeStructure		**boneNodeArray;
-
-		public:
-
-			BoneRefArrayStructure();
-			~BoneRefArrayStructure();
-
-			int32 GetBoneCount(void) const
-			{
-				return (boneCount);
-			}
-
-			const BoneNodeStructure *const *GetBoneNodeArray(void) const
-			{
-				return (boneNodeArray);
-			}
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class BoneCountArrayStructure : public Structure
-	{
-		private:
-
-			int32					vertexCount;
-			const unsigned_int16	*boneCountArray;
-			unsigned_int16			*arrayStorage;
-
-		public:
-
-			BoneCountArrayStructure();
-			~BoneCountArrayStructure();
-
-			int32 GetVertexCount(void) const
-			{
-				return (vertexCount);
-			}
-
-			const unsigned_int16 *GetBoneCountArray(void) const
-			{
-				return (boneCountArray);
-			}
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class BoneIndexArrayStructure : public Structure
-	{
-		private:
-
-			int32					boneIndexCount;
-			const unsigned_int16	*boneIndexArray;
-			unsigned_int16			*arrayStorage;
-
-		public:
-
-			BoneIndexArrayStructure();
-			~BoneIndexArrayStructure();
-
-			int32 GetBoneIndexCount(void) const
-			{
-				return (boneIndexCount);
-			}
-
-			const unsigned_int16 *GetBoneIndexArray(void) const
-			{
-				return (boneIndexArray);
-			}
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class BoneWeightArrayStructure : public Structure
-	{
-		private:
-
-			int32			boneWeightCount;
-			const float		*boneWeightArray;
-
-		public:
-
-			BoneWeightArrayStructure();
-			~BoneWeightArrayStructure();
-
-			int32 GetBoneWeightCount(void) const
-			{
-				return (boneWeightCount);
-			}
-
-			const float *GetBoneWeightArray(void) const
-			{
-				return (boneWeightArray);
-			}
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class SkeletonStructure : public Structure
-	{
-		private:
-
-			const BoneRefArrayStructure		*boneRefArrayStructure;
-			const TransformStructure		*transformStructure;
-
-		public:
-
-			SkeletonStructure();
-			~SkeletonStructure();
-
-			const BoneRefArrayStructure *GetBoneRefArrayStructure(void) const
-			{
-				return (boneRefArrayStructure);
-			}
-
-			const TransformStructure *GetTransformStructure(void) const
-			{
-				return (transformStructure);
-			}
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class SkinStructure : public Structure
-	{
-		private:
-
-			const SkeletonStructure				*skeletonStructure;
-			const BoneCountArrayStructure		*boneCountArrayStructure;
-			const BoneIndexArrayStructure		*boneIndexArrayStructure;
-			const BoneWeightArrayStructure		*boneWeightArrayStructure;
-
-		public:
-
-			SkinStructure();
-			~SkinStructure();
-
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class MaterialStructure : public Structure
-	{
-		private:
-
-			bool				twoSidedFlag;
-			const char			*materialName;
-
-		public:
-
-			MaterialStructure();
-			~MaterialStructure();
-
-			bool GetTwoSidedFlag(void) const
-			{
-				return (twoSidedFlag);
-			}
-
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
-	};
-
-
-	class AttribStructure : public Structure
+	class AttribStructure : public OpenGexStructure
 	{
 		private:
 
@@ -920,7 +1002,7 @@ namespace OGEX
 				return (attribString);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
 	};
 
 
@@ -940,8 +1022,8 @@ namespace OGEX
 				return (param);
 			}
 
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
@@ -961,8 +1043,8 @@ namespace OGEX
 				return (color);
 			}
 
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
@@ -978,7 +1060,7 @@ namespace OGEX
 			TextureStructure();
 			~TextureStructure();
 
-			const char *GetTextureName(void) const
+			const String& GetTextureName(void) const
 			{
 				return (textureName);
 			}
@@ -988,13 +1070,13 @@ namespace OGEX
 				return (texcoordIndex);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class AttenStructure : public Structure
+	class AttenStructure : public OpenGexStructure
 	{
 		private:
 
@@ -1068,18 +1150,45 @@ namespace OGEX
 				return (powerParam);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class KeyStructure : public Structure
+	class MaterialStructure : public OpenGexStructure
+	{
+		private:
+
+			bool			twoSidedFlag;
+			const char		*materialName;
+
+		public:
+
+			MaterialStructure();
+			~MaterialStructure();
+
+			bool GetTwoSidedFlag(void) const
+			{
+				return (twoSidedFlag);
+			}
+
+			const char *GetMaterialName(void) const
+			{
+				return (materialName);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class KeyStructure : public OpenGexStructure
 	{
 		private:
 
 			String			keyKind;
-
 			bool			scalarFlag;
 
 		public:
@@ -1097,13 +1206,13 @@ namespace OGEX
 				return (scalarFlag);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class CurveStructure : public Structure
+	class CurveStructure : public OpenGexStructure
 	{
 		private:
 
@@ -1160,9 +1269,9 @@ namespace OGEX
 				return (keyDataElementCount);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
@@ -1173,7 +1282,7 @@ namespace OGEX
 			TimeStructure();
 			~TimeStructure();
 
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
@@ -1184,11 +1293,11 @@ namespace OGEX
 			ValueStructure();
 			~ValueStructure();
 
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class TrackStructure : public Structure
+	class TrackStructure : public OpenGexStructure
 	{
 		private:
 
@@ -1223,13 +1332,13 @@ namespace OGEX
 				return (valueStructure);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
 	};
 
 
-	class AnimationStructure : public Structure
+	class AnimationStructure : public OpenGexStructure
 	{
 		private:
 
@@ -1250,9 +1359,71 @@ namespace OGEX
 				return (clipIndex);
 			}
 
-			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value) override;
-			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const override;
-			DataResult ProcessData(DataDescription *dataDescription) override;
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class ClipStructure : public OpenGexStructure
+	{
+		private:
+
+			unsigned_int32		clipIndex;
+
+			float				frameRate;
+			const char			*clipName;
+
+		public:
+
+			ClipStructure();
+			~ClipStructure();
+
+			unsigned_int32 GetClipIndex(void) const
+			{
+				return (clipIndex);
+			}
+
+			float GetFrameRate(void) const
+			{
+				return (frameRate);
+			}
+
+			const char *GetClipName(void) const
+			{
+				return (clipName);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
+			DataResult ProcessData(DataDescription *dataDescription);
+	};
+
+
+	class ExtensionStructure : public OpenGexStructure
+	{
+		private:
+
+			String		applicationString;
+			String		typeString;
+
+		public:
+
+			ExtensionStructure();
+			~ExtensionStructure();
+
+			const String& GetApplicationString(void) const
+			{
+				return (applicationString);
+			}
+
+			const String& GetTypeString(void) const
+			{
+				return (typeString);
+			}
+
+			bool ValidateProperty(const DataDescription *dataDescription, const String& identifier, DataType *type, void **value);
+			bool ValidateSubstructure(const DataDescription *dataDescription, const Structure *structure) const;
 	};
 
 
@@ -1264,6 +1435,8 @@ namespace OGEX
 			float		angleScale;
 			float		timeScale;
 			int32		upDirection;
+
+			DataResult ProcessData(void);
 
 		public:
 
@@ -1310,9 +1483,8 @@ namespace OGEX
 				upDirection = direction;
 			}
 
-			Structure *ConstructStructure(const String& identifier) const override;
-			bool ValidateTopLevelStructure(const Structure *structure) const override;
-			DataResult ProcessData(void) override;
+			Structure *CreateStructure(const String& identifier) const;
+			bool ValidateTopLevelStructure(const Structure *structure) const;
 	};
 }
 
