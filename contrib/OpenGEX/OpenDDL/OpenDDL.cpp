@@ -1953,7 +1953,11 @@ DataResult RefDataType::ParseValue(const char *& text, PrimType *value)
 
 		string.SetLength(textLength);
 		Data::ReadIdentifier(text, &textLength, string);
+#if ODDL_HAS_CXX11_RVALUE_REFERENCES
 		value->AddName(static_cast<String&&>(string));
+#else
+		value->AddName(string);
+#endif
 
 		text += textLength;
 		text += Data::GetWhitespaceLength(text);

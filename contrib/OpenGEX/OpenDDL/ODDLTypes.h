@@ -52,30 +52,30 @@
 #include <new>
 
 #if !defined(ODDL_CXX11)
-#  if defined(_MSC_VER)
-#    if _MSC_VER >= 1800
-#      define ODDL_CXX11 1
-#    endif
-#  else
-#    if __cplusplus > 199711L
-#      define ODDL_CXX11 1
-#    endif
-#  endif
+	#if defined(_MSC_VER)
+		#if _MSC_VER >= 1800
+			#define ODDL_CXX11 1
+		#endif
+	#else
+		#if __cplusplus > 199711L
+			#define ODDL_CXX11 1
+		#endif
+	#endif
 #endif
 
 #if defined(ODDL_CXX11)
-#  define ODDL_DELETE delete
-#  define ODDL_FINAL final
-#  define ODDL_OVERRIDE override
-#  define ODDL_HAS_CXX11_RVALUE_REFERENCES 1
+	#define ODDL_DELETE delete
+	#define ODDL_FINAL final
+	#define ODDL_OVERRIDE override
+	#define ODDL_HAS_CXX11_RVALUE_REFERENCES 1
 #else
-#  define ODDL_DELETE
-#  define ODDL_FINAL
-#  define ODDL_OVERRIDE
-#  define ODDL_HAS_CXX11_RVALUE_REFERENCES 0
-#  if !defined(nullptr)
-#    define nullptr 0
-#  endif
+	#define ODDL_DELETE
+	#define ODDL_FINAL
+	#define ODDL_OVERRIDE
+	#define ODDL_HAS_CXX11_RVALUE_REFERENCES 0
+	#if !defined(nullptr)
+		#define nullptr 0
+	#endif
 #endif
 
 namespace ODDL
@@ -111,7 +111,6 @@ namespace ODDL
 		typedef unsigned long		unsigned_machine_int;
 
 	#endif
-
 
 	inline int32 Abs(int32 x)
 	{
