@@ -739,8 +739,8 @@ private:
 		aiColor4D clrDiffuse(0.6f, 0.6f, 0.6f, 1.0f);
 		material->AddProperty(&clrDiffuse, 1, AI_MATKEY_COLOR_DIFFUSE);
 		material->AddProperty(&clrDiffuse, 1, AI_MATKEY_COLOR_SPECULAR);
-		clrDiffuse = aiColor4D(0.05f, 0.05f, 0.05f, 1.0f);
-		material->AddProperty(&clrDiffuse, 1, AI_MATKEY_COLOR_AMBIENT);
+		aiColor4D clrAmbient = aiColor4D(0.05f, 0.05f, 0.05f, 1.0f);
+		material->AddProperty(&clrAmbient, 1, AI_MATKEY_COLOR_AMBIENT);
 
 		return material.release();
 	}
@@ -875,7 +875,6 @@ private:
 		mesh->mPrimitiveTypes = ConvertPrimitiveType(structure.GetMeshPrimitive());
 
 		const Structure *subStructure = structure.GetFirstSubnode();
-		bool meshIsVerbose = false;
 		while (subStructure) {
 			switch (subStructure->GetStructureType()) {
 				case kStructureVertexArray: {
