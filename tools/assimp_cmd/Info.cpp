@@ -233,8 +233,6 @@ int Assimp_Info (const char* const* params, unsigned int num)
 	import.ppFlags = num>1&&(!strcmp(params[1],"--raw")||!strcmp(params[1],"-r")) ? 0
 		: aiProcessPreset_TargetRealtime_MaxQuality;
 
-	globalImporter->SetExtraVerbose(true);
-
 	// import the main model
 	const aiScene* scene = ImportModel(import,in);
 	if (!scene) {

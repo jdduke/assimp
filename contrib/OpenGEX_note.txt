@@ -1,0 +1,6 @@
+This is a slightly modified version of the OpenGEX Import Template v1.1.2,
+available at http://opengex.org/. The key changes include:
+
+- Made C++11 dependency optional
+  - Abstracted C++11 keyword usage (final, override, delete)
+  - Define guards for rvalue references

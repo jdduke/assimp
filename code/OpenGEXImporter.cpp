@@ -44,6 +44,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "fast_atof.h"
 #include "MakeVerboseFormat.h"
+#include "TinyFormatter.h"
 #include "./../contrib/OpenGEX/OpenGEX.h"
 
 #include <map>
@@ -65,6 +66,7 @@ static const aiImporterDesc desc = {
 using namespace ODDL;
 using namespace OGEX;
 
+using Assimp::Formatter::format;
 using std::auto_ptr;
 
 namespace Assimp {
@@ -207,6 +209,38 @@ void VisitSubnodes(const Structure& structure, Visitor& visitor) {
 	}
 }
 
+void ConvertFloatArray(const float* data, aiVector3D& v) {
+	v.x = data[0];
+	v.y = data[1];
+	v.z = data[2];
+}
+
+void ConvertFloatArray(const float* data, aiColor4D& c) {
+	c.r = data[0];
+	c.g = data[1];
+	c.b = data[2];
+	c.a = data[3];
+}
+
+void ConvertFloatArray(const float* data, aiMatrix4x4& m) {
+	m.a1 = data[0];
+	m.a2 = data[1];
+	m.a3 = data[2];
+	m.a4 = data[3];
+	m.b1 = data[4];
+	m.b2 = data[5];
+	m.b3 = data[6];
+	m.b4 = data[7];
+	m.c1 = data[8];
+	m.c2 = data[9];
+	m.c3 = data[10];
+	m.c4 = data[11];
+	m.d1 = data[12];
+	m.d2 = data[13];
+	m.d3 = data[14];
+	m.d4 = data[15];
+}
+
 struct LightVisitor : public Visitor {
 	explicit LightVisitor(aiLight* light) : light(light) {}
 
@@ -334,6 +368,65 @@ private:
 	aiMatrix4x4* const result;
 };
 
+
+struct MaterialVisitor : public Visitor {
+	explicit MaterialVisitor(aiMaterial* material) : material(material) {}
+
+	virtual void Visit(const ColorStructure& color) {
+		const String& attrib = color.GetAttribString();
+		aiColor4D value;
+		ConvertFloatArray(color.GetColor(), value);
+		if (attrib == "diffuse") {
+			material->AddProperty(&value, 1, AI_MATKEY_COLOR_DIFFUSE);
+		} else if (attrib == "specular") {
+			material->AddProperty(&value, 1, AI_MATKEY_COLOR_SPECULAR);
+		} else if (attrib == "emission") {
+			material->AddProperty(&value, 1, AI_MATKEY_COLOR_EMISSIVE);
+		} else if (attrib == "opacity") {
+			Logger().LogWarn("Opacity material color attribute unsupported");
+		} else if (attrib == "transparency") {
+			material->AddProperty(&value, 1, AI_MATKEY_COLOR_TRANSPARENT);
+		} else {
+			Logger().LogWarn(format() << "Invalid material color attribute: " << attrib);
+		}
+	}
+
+	virtual void Visit(const ParamStructure& param) {
+		const String& attrib = param.GetAttribString();
+		if (attrib == "specular_power") {
+			float specularPower = param.GetParam();
+			material->AddProperty(&specularPower, 1, AI_MATKEY_SHININESS);
+		} else {
+			Logger().LogWarn(format() << "Invalid material parameter attribute: " << attrib);
+		}
+	}
+
+	virtual void Visit(const TextureStructure& texture) {
+		// TODO: Convert texture transforms.
+		const String& attrib = texture.GetAttribString();
+		aiString textureName(static_cast<const char*>(texture.GetTextureName()));
+		unsigned int textureCoordIndex = texture.GetTexcoordIndex();
+		if (attrib == "diffuse") {
+			material->AddProperty(&textureName, AI_MATKEY_TEXTURE_DIFFUSE(textureCoordIndex));
+		} else if (attrib == "specular") {
+			material->AddProperty(&textureName, AI_MATKEY_TEXTURE_SPECULAR(textureCoordIndex));
+		} else if (attrib == "emission") {
+			material->AddProperty(&textureName, AI_MATKEY_TEXTURE_EMISSIVE(textureCoordIndex));
+		} else if (attrib == "opacity") {
+			material->AddProperty(&textureName, AI_MATKEY_TEXTURE_OPACITY(textureCoordIndex));
+		} else if (attrib == "transparency") {
+			Logger().LogWarn("Transparency material texture attribute unsupported");
+		} else if (attrib == "normal") {
+			material->AddProperty(&textureName, AI_MATKEY_TEXTURE_NORMALS(textureCoordIndex));
+		} else {
+			Logger().LogWarn(format() << "Invalid material texture attribute: " << attrib);
+		}
+	}
+
+	private:
+		aiMaterial* const material;
+};
+
 const char* DataResultToString(DataResult result) {
 #define CASE_DATA_RESULT(NAME)	case kDataOpenGex ## NAME: return #NAME;
 	switch (result) {
@@ -372,38 +465,6 @@ const char* DataResultToString(DataResult result) {
 			return "Unknown result";
 	}
 #undef CASE_DATA_RESULT
-}
-
-void ConvertFloatArray(const float* data, aiVector3D& v) {
-	v.x = data[0];
-	v.y = data[1];
-	v.z = data[2];
-}
-
-void ConvertFloatArray(const float* data, aiColor4D& c) {
-	c.r = data[0];
-	c.g = data[1];
-	c.b = data[2];
-	c.a = data[3];
-}
-
-void ConvertFloatArray(const float* data, aiMatrix4x4& m) {
-	m.a1 = data[0];
-	m.a2 = data[1];
-	m.a3 = data[2];
-	m.a4 = data[3];
-	m.b1 = data[4];
-	m.b2 = data[5];
-	m.b3 = data[6];
-	m.b4 = data[7];
-	m.c1 = data[8];
-	m.c2 = data[9];
-	m.c3 = data[10];
-	m.c4 = data[11];
-	m.d1 = data[12];
-	m.d2 = data[13];
-	m.d3 = data[14];
-	m.d4 = data[15];
 }
 
 unsigned int GetArrayAttribIndex(const String& attrib) {
@@ -458,7 +519,10 @@ void ConvertTypedIndexArray(const PrimitiveStructure& primitiveStructure, aiFace
 		pFace.mNumIndices = arraySize;
 		pFace.mIndices = new unsigned int[arraySize];
 		for (int32 j = 0; j < arraySize; ++j) {
-			// TODO: Throw on index overflow?
+			if (pData[j] > std::numeric_limits<unsigned int>::max())
+				Logger().ThrowException(
+						format() << "Invalid index: " << pData[j] << ", must be <= 65535.");
+
 			pFace.mIndices[j] = static_cast<unsigned int>(pData[j]);
 		}
 	}
@@ -680,11 +744,21 @@ aiMaterial* CreateDefaultMaterial() {
 aiMaterial* ConvertMaterial(const MaterialStructure& structure) {
 	return CreateDefaultMaterial();
 
-	/* TODO: Implement
 	aiMaterial* material(new aiMaterial());
 
+	aiString s;
+	if (structure.GetMaterialName()) {
+		s.Set(structure.GetMaterialName());
+		material->AddProperty(&s, AI_MATKEY_NAME);
+	}
+
+	bool twoSided = structure.GetTwoSidedFlag();
+	material->AddProperty(&twoSided, 1, AI_MATKEY_TWOSIDED);
+
+	MaterialVisitor visitor(material);
+	Visit(structure, visitor);
+
 	return material;
-	*/
 }
 
 template <typename T>
@@ -1028,7 +1102,7 @@ void OpenGEXImporter::InternReadFile( const std::string &file, aiScene *pScene, 
 	OpenGexDataDescription openGexDataDescription;
 	DataResult result = openGexDataDescription.ProcessText(&*contents.begin());
 	if (result != kDataOkay) {
-		ThrowException(std::string("Failed to load OpenGEX file: ") + DataResultToString(result));
+		ThrowException(format() << "Failed to load OpenGEX file: " << DataResultToString(result));
 	}
 
 	OpenGEXConverter conv(openGexDataDescription, pScene);

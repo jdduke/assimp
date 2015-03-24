@@ -2664,6 +2664,8 @@ DataResult MaterialStructure::ProcessData(DataDescription *dataDescription)
 		{
 			return (kDataExtraneousSubstructure);
 		}
+
+		materialName = static_cast<const NameStructure *>(structure)->GetName();
 	}
 
 	// Do application-specific material processing here.
