@@ -486,9 +486,9 @@ unsigned int GetArrayAttribIndex(const String& attrib) {
 template <typename Type>
 void ConvertVertexArray(const VertexArrayStructure& structure, Type** pVertexArray, unsigned int* pNumVertices) {
 	const DataStructure<FloatDataType>& dataStructure = *structure.GetDataStructure();
-	int32 arraySize = dataStructure.GetArraySize();
-	int32 elementCount = dataStructure.GetDataElementCount();
-	int32 vertexCount = elementCount / arraySize;
+	const int32 arraySize = dataStructure.GetArraySize();
+	const int32 elementCount = dataStructure.GetDataElementCount();
+	const int32 vertexCount = elementCount / arraySize;
 	const float *data = &dataStructure.GetDataElement(0);
 
 	*pVertexArray = new Type[vertexCount];
@@ -503,13 +503,17 @@ void ConvertVertexArray(const VertexArrayStructure& structure, Type** pVertexArr
 }
 
 template <typename DataType>
-void ConvertTypedIndexArray(const PrimitiveStructure& primitiveStructure, aiFace** ppFaceArray, unsigned int* pNumFaces) {
+void ConvertTypedIndexArray(const PrimitiveStructure& primitiveStructure,
+                            bool flipWindingOrder,
+                            aiFace** ppFaceArray,
+                            unsigned int* pNumFaces) {
 	const DataStructure<DataType>& dataStructure = static_cast<const DataStructure<DataType>&>(primitiveStructure);
 	const typename DataType::PrimType* pData = &dataStructure.GetDataElement(0);
 
-	int32 arraySize = dataStructure.GetArraySize();
-	int32 elementCount = dataStructure.GetDataElementCount();
-	int32 faceCount = elementCount / arraySize;
+	// Assimp assumes a counter-clockwise winding order by default.
+	const int32 arraySize = dataStructure.GetArraySize();
+	const int32 elementCount = dataStructure.GetDataElementCount();
+	const int32 faceCount = elementCount / arraySize;
 
 	*ppFaceArray = new aiFace[faceCount];
 	*pNumFaces = faceCount;
@@ -519,11 +523,10 @@ void ConvertTypedIndexArray(const PrimitiveStructure& primitiveStructure, aiFace
 		pFace.mNumIndices = arraySize;
 		pFace.mIndices = new unsigned int[arraySize];
 		for (int32 j = 0; j < arraySize; ++j) {
-			if (pData[j] > std::numeric_limits<unsigned int>::max())
-				Logger().ThrowException(
-						format() << "Invalid index: " << pData[j] << ", must be <= 65535.");
-
-			pFace.mIndices[j] = static_cast<unsigned int>(pData[j]);
+			if (flipWindingOrder)
+				pFace.mIndices[j] = static_cast<unsigned int>(pData[arraySize - j - 1]);
+			else
+				pFace.mIndices[j] = static_cast<unsigned int>(pData[j]);
 		}
 	}
 }
@@ -544,7 +547,7 @@ void CreateDefaultIndexArray(aiMesh* mesh) {
 			stride = mesh->mNumVertices;
 			break;
 		default:
-			ai_assert(false && "Invalid primitive type.");
+			ai_assert(false && "Invalid primitive type");
 			break;
 	}
 
@@ -562,29 +565,33 @@ void CreateDefaultIndexArray(aiMesh* mesh) {
 }
 
 void ConvertIndexArray(const IndexArrayStructure& structure, aiFace** pFaceArray, unsigned int* pNumFaces) {
-	// TODO: Account for index winding order (structure.GetFrontFace()).
+	// TODO: Account for material index and restart index.
 	const PrimitiveStructure* primitiveStructure = structure.GetPrimitiveStructure();
 	ai_assert(primitiveStructure &&	"Invalid primitive structure handle");
-	StructureType type = primitiveStructure->GetStructureType();
+
+	const bool flipWindingOrder = structure.GetFrontFace() == "cw";
+	const StructureType type = primitiveStructure->GetStructureType();
 	if (type == kDataUnsignedInt8) {
-		return ConvertTypedIndexArray<UnsignedInt8DataType>(*primitiveStructure, pFaceArray, pNumFaces);
+		ConvertTypedIndexArray<UnsignedInt8DataType>(*primitiveStructure, flipWindingOrder, pFaceArray, pNumFaces);
 	} else if (type == kDataUnsignedInt16) {
-		return ConvertTypedIndexArray<UnsignedInt16DataType>(*primitiveStructure, pFaceArray, pNumFaces);
+		ConvertTypedIndexArray<UnsignedInt16DataType>(*primitiveStructure, flipWindingOrder, pFaceArray, pNumFaces);
 	} else if (type == kDataUnsignedInt32) {
-		return ConvertTypedIndexArray<UnsignedInt32DataType>(*primitiveStructure, pFaceArray, pNumFaces);
+		ConvertTypedIndexArray<UnsignedInt32DataType>(*primitiveStructure, flipWindingOrder, pFaceArray, pNumFaces);
+	} else if (type == kDataUnsignedInt64) {
+		ConvertTypedIndexArray<UnsignedInt64DataType>(*primitiveStructure, flipWindingOrder, pFaceArray, pNumFaces);
 	} else {
-		return ConvertTypedIndexArray<UnsignedInt64DataType>(*primitiveStructure, pFaceArray, pNumFaces);
+		Logger().ThrowException(format() << "Invalid index array primitive type: " << type);
 	}
 }
 
 unsigned int ConvertPrimitiveType(const String& primitive) {
 	if (primitive == "points") return aiPrimitiveType_POINT;
 	if (primitive == "lines") return aiPrimitiveType_LINE;
-	if (primitive == "line_strip") Logger().ThrowException("Line strip not yet supported");
+	if (primitive == "line_strip") Logger().ThrowException("Line strip primitives not yet supported");
 	if (primitive == "triangles") return aiPrimitiveType_TRIANGLE;
-	if (primitive == "triangle_strip") Logger().ThrowException("Triangle strip not yet supported");
+	if (primitive == "triangle_strip") Logger().ThrowException("Triangle strip primitives not yet supported");
 	if (primitive == "quads") return aiPrimitiveType_POLYGON;
-	Logger().ThrowException("Invalid primitive type");
+	Logger().ThrowException(format() << "Invalid primitive type: " << primitive);
 	return 0;
 }
 
@@ -786,23 +793,11 @@ void SafeDelete(std::vector< T* >& source) {
 class OpenGEXConverter : public LogFunctions<OpenGEXConverter> {
 public:
 
-	OpenGEXConverter(const OpenGexDataDescription& desc, aiScene* out) {
-		ConvertScene(desc, out);
-	}
-
-	~OpenGEXConverter() {
-		SafeDelete(rawMeshes);
-		// Pointer containers below should all be empty if import is successful.
-		SafeDelete(meshes);
-		SafeDelete(materials);
-		SafeDelete(animations);
-		SafeDelete(lights);
-		SafeDelete(cameras);
-	}
-
-private:
+	OpenGEXConverter() { }
+	~OpenGEXConverter() { Cleanup(); }
 
 	void ConvertScene(const OpenGexDataDescription& desc, aiScene* out) {
+		ai_assert(desc.GetRootStructure() && "Invalid OpenGEX data description");
 		out->mRootNode = new aiNode();
 		out->mRootNode->mName.Set("RootNode");
 		ConvertObjects(*desc.GetRootStructure());
@@ -812,6 +807,7 @@ private:
 			out->mFlags |= AI_SCENE_FLAGS_INCOMPLETE;
 	}
 
+private:
 	static bool IsObject(const Structure& structure) {
 		const StructureType type = structure.GetStructureType();
 		return type == kStructureLightObject ||
@@ -906,6 +902,7 @@ private:
 
 	aiNode* ConvertNode(const NodeStructure& structure) {
 		auto_ptr<aiNode> node(new aiNode);
+		node->mName.Set(structure.GetNodeName());
 
 		TransformVisitor transformVisitor(&node->mTransformation);
 		VisitSubnodes(structure, transformVisitor);
@@ -1036,6 +1033,16 @@ private:
 		SafeAllocateAndMove(cameras, &out->mCameras, &out->mNumCameras);
 	}
 
+	void Cleanup() {
+		SafeDelete(rawMeshes);
+		// Pointer containers below should all be empty if import is successful.
+		SafeDelete(meshes);
+		SafeDelete(materials);
+		SafeDelete(animations);
+		SafeDelete(lights);
+		SafeDelete(cameras);
+	}
+
 private:
 
 	typedef std::map<const Structure*, unsigned int> StructureMap;
@@ -1105,7 +1112,7 @@ void OpenGEXImporter::InternReadFile( const std::string &file, aiScene *pScene, 
 		ThrowException(format() << "Failed to load OpenGEX file: " << DataResultToString(result));
 	}
 
-	OpenGEXConverter conv(openGexDataDescription, pScene);
+	OpenGEXConverter().ConvertScene(openGexDataDescription, pScene);
 }
 
 //------------------------------------------------------------------------------------------------

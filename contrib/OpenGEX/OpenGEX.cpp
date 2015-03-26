@@ -41,7 +41,6 @@
 */
 
 
-#include <windows.h>
 #include "OpenGEX.h"
 
 
