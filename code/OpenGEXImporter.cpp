@@ -260,7 +260,7 @@ struct LightVisitor : public Visitor {
 
 	virtual void Visit(const TextureStructure& texture) {
 		if (texture.GetAttribString() == "projection") {
-
+			// TODO: Handle	projection texture?
 		}
 	}
 
@@ -318,10 +318,11 @@ struct TransformVisitor : public Visitor {
 	virtual void Visit(const TransformStructure& transform) {
 		if (transform.GetObjectFlag()) return;
 		const float* data = transform.GetTransform(0);
-		*result *= aiMatrix4x4(data[0], data[1], data[2], data[3],
-		                       data[4], data[5], data[6], data[7],
-		                       data[8], data[9], data[10], data[11],
-		                       data[12], data[13], data[14], data[15]);
+		// OpenGEX stores transforms in column-major order.
+		*result *= aiMatrix4x4(data[0], data[4], data[8],  data[12],
+		                       data[1], data[5], data[9],  data[13],
+		                       data[2], data[6], data[10], data[14],
+		                       data[3], data[7], data[11], data[15]);
 	}
 
 	virtual void Visit(const TranslationStructure& transform) {
@@ -749,9 +750,7 @@ aiMaterial* CreateDefaultMaterial() {
 }
 
 aiMaterial* ConvertMaterial(const MaterialStructure& structure) {
-	return CreateDefaultMaterial();
-
-	aiMaterial* material(new aiMaterial());
+	auto_ptr<aiMaterial> material(new aiMaterial());
 
 	aiString s;
 	if (structure.GetMaterialName()) {
@@ -762,10 +761,10 @@ aiMaterial* ConvertMaterial(const MaterialStructure& structure) {
 	bool twoSided = structure.GetTwoSidedFlag();
 	material->AddProperty(&twoSided, 1, AI_MATKEY_TWOSIDED);
 
-	MaterialVisitor visitor(material);
-	Visit(structure, visitor);
+	MaterialVisitor visitor(material.get());
+	VisitSubnodes(structure, visitor);
 
-	return material;
+	return material.release();
 }
 
 template <typename T>
@@ -1002,10 +1001,10 @@ private:
 			return meshMaterialIt->second;
 		}
 
-		// First look at the raw meshes container. If it contains a mesh for the provided |geometry|, "consume" that mesh.
-		// Otherwise, clone the already consumed mesh, as it's already been used for a different material.
+		// First look at the raw meshes container. If it contains a mesh for the provided geometry, "consume" the mesh.
+		// Otherwise, clone the already consumed mesh; it's already been used for a different material.
 		aiMesh* mesh = NULL;
-		const StructureMapIt rawMeshIt = rawMeshMap.find(geometry);
+		StructureMapConstIt rawMeshIt = rawMeshMap.find(geometry);
 		if (rawMeshIt != rawMeshMap.end()) {
 			mesh = rawMeshes[rawMeshIt->second];
 			rawMeshes.erase(rawMeshes.begin() +	rawMeshIt->second);
