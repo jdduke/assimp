@@ -48,6 +48,7 @@
 #define ODDLTypes_h
 
 
+#include <stddef.h>
 #include <math.h>
 #include <new>
 
@@ -78,10 +79,11 @@
 	#endif
 #endif
 
+#define restrict __restrict
+
 namespace ODDL
 {
-	#define restrict __restrict
-
+#if defined (_WIN32) || defined(WIN32)
 	typedef signed char				int8;
 	typedef unsigned char			unsigned_int8;
 
@@ -99,18 +101,31 @@ namespace ODDL
 		typedef __int64				machine;
 		typedef unsigned __int64	unsigned_machine;
 
-		typedef __int64				machine_int;
-		typedef unsigned __int64	unsigned_machine_int;
-
 	#else
 
 		typedef long				machine;
 		typedef unsigned long		unsigned_machine;
 
-		typedef long				machine_int;
-		typedef unsigned long		unsigned_machine_int;
-
 	#endif
+
+#else
+
+	typedef int8_t					int8;
+	typedef uint8_t					unsigned_int8;
+
+	typedef int16_t					int16;
+	typedef uint16_t				unsigned_int16;
+
+	typedef int32_t						int32;
+	typedef uint32_t				unsigned_int32;
+
+	typedef int64_t					int64;
+	typedef uint64_t				unsigned_int64;
+
+	typedef ptrdiff_t				machine;
+	typedef size_t					unsigned_machine;
+
+#endif
 
 	inline int32 Abs(int32 x)
 	{

@@ -1173,11 +1173,10 @@ DataResult VertexArrayStructure::ProcessData(DataDescription *dataDescription)
 
 	dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
 
-	int32 arraySize = dataStructure->GetArraySize();
-	int32 elementCount = dataStructure->GetDataElementCount();
-	int32 vertexCount = elementCount / arraySize;
-	const float *data = &dataStructure->GetDataElement(0);
-
+	// int32 arraySize = dataStructure->GetArraySize();
+	// int32 elementCount = dataStructure->GetDataElementCount();
+	// int32 vertexCount = elementCount / arraySize;
+	// const float *data = &dataStructure->GetDataElement(0);
 	// Do something with the vertex data here.
 
 	return (kDataOkay);
@@ -1885,14 +1884,12 @@ DataResult MeshStructure::ProcessData(DataDescription *dataDescription)
 		StructureType type = structure->GetStructureType();
 		if (type == kStructureVertexArray)
 		{
-			const VertexArrayStructure *vertexArrayStructure = static_cast<const VertexArrayStructure *>(structure);
-
+			// const VertexArrayStructure *vertexArrayStructure = static_cast<const VertexArrayStructure *>(structure);
 			// Process vertex array here.
 		}
 		else if (type == kStructureIndexArray)
 		{
-			IndexArrayStructure *indexArrayStructure = static_cast<IndexArrayStructure *>(structure);
-
+			// IndexArrayStructure *indexArrayStructure = static_cast<IndexArrayStructure *>(structure);
 			// Process index array here.
 		}
 		else if (type == kStructureSkin)
@@ -1902,7 +1899,8 @@ DataResult MeshStructure::ProcessData(DataDescription *dataDescription)
 				return (kDataExtraneousSubstructure);
 			}
 
-			skinStructure = static_cast<SkinStructure *>(structure);
+			// skinStructure = static_cast<SkinStructure *>(structure);
+			// Process skin structure here.
 		}
 
 		structure = structure->Next();
@@ -2115,8 +2113,7 @@ DataResult LightObjectStructure::ProcessData(DataDescription *dataDescription)
 			const TextureStructure *textureStructure = static_cast<const TextureStructure *>(structure);
 			if (textureStructure->GetAttribString() == "projection")
 			{
-				const char *textureName = textureStructure->GetTextureName();
-
+				// const char *textureName = textureStructure->GetTextureName();
 				// Process light texture here.
 			}
 		}
@@ -2130,23 +2127,20 @@ DataResult LightObjectStructure::ProcessData(DataDescription *dataDescription)
 			{
 				if ((curveType == "linear") || (curveType == "smooth"))
 				{
-					float beginParam = attenStructure->GetBeginParam();
-					float endParam = attenStructure->GetEndParam();
-
+					// float beginParam = attenStructure->GetBeginParam();
+					// float endParam = attenStructure->GetEndParam();
 					// Process linear or smooth attenuation here.
 				}
 				else if (curveType == "inverse")
 				{
-					float scaleParam = attenStructure->GetScaleParam();
-					float linearParam = attenStructure->GetLinearParam();
-
+					// float scaleParam = attenStructure->GetScaleParam();
+					// float linearParam = attenStructure->GetLinearParam();
 					// Process inverse attenuation here.
 				}
 				else if (curveType == "inverse_square")
 				{
-					float scaleParam = attenStructure->GetScaleParam();
-					float quadraticParam = attenStructure->GetQuadraticParam();
-
+					// float scaleParam = attenStructure->GetScaleParam();
+					// float quadraticParam = attenStructure->GetQuadraticParam();
 					// Process inverse square attenuation here.
 				}
 				else
@@ -2156,14 +2150,12 @@ DataResult LightObjectStructure::ProcessData(DataDescription *dataDescription)
 			}
 			else if (attenKind == "angle")
 			{
-				float endParam = attenStructure->GetEndParam();
-
+				// float endParam = attenStructure->GetEndParam();
 				// Process angular attenutation here.
 			}
 			else if (attenKind == "cos_angle")
 			{
-				float endParam = attenStructure->GetEndParam();
-
+				// float endParam = attenStructure->GetEndParam();
 				// Process angular attenutation here.
 			}
 			else
@@ -2360,7 +2352,7 @@ DataResult ColorStructure::ProcessData(DataDescription *dataDescription)
 	}
 
 	const DataStructure<FloatDataType> *dataStructure = static_cast<const DataStructure<FloatDataType> *>(structure);
-	unsigned_int32 arraySize = dataStructure->GetArraySize();
+	int32 arraySize = static_cast<int32>(dataStructure->GetArraySize());
 	if (dataStructure->GetDataElementCount() == arraySize)
 	{
 		const float *data = &dataStructure->GetDataElement(0);
@@ -2455,8 +2447,7 @@ DataResult TextureStructure::ProcessData(DataDescription *dataDescription)
 		}
 		else if (structure->GetBaseStructureType() == kStructureMatrix)
 		{
-			const MatrixStructure *matrixStructure = static_cast<const MatrixStructure *>(structure);
-
+			// const MatrixStructure *matrixStructure = static_cast<const MatrixStructure *>(structure);
 			// Process transform matrix here.
 		}
 

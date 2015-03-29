@@ -105,25 +105,6 @@ void ConvertFloatArray(const float* data, aiColor4D& c) {
 	c.a = data[3];
 }
 
-void ConvertFloatArray(const float* data, aiMatrix4x4& m) {
-	m.a1 = data[0];
-	m.a2 = data[1];
-	m.a3 = data[2];
-	m.a4 = data[3];
-	m.b1 = data[4];
-	m.b2 = data[5];
-	m.b3 = data[6];
-	m.b4 = data[7];
-	m.c1 = data[8];
-	m.c2 = data[9];
-	m.c3 = data[10];
-	m.c4 = data[11];
-	m.d1 = data[12];
-	m.d2 = data[13];
-	m.d3 = data[14];
-	m.d4 = data[15];
-}
-
 // TODO: Remove the visitor pattern, it's used sparingly and is probably
 // unnecessary boilerplate.
 struct Visitor {
@@ -223,27 +204,26 @@ struct LightVisitor : public Visitor {
 
 		if (attenKind == "distance") {
 			if ((curveType == "linear") || (curveType == "smooth")) {
-				float beginParam = atten.GetBeginParam();
-				float endParam = atten.GetEndParam();
-
 				// TODO: Process linear or smooth attenuation here.
+				// float beginParam = atten.GetBeginParam();
+				// float endParam = atten.GetEndParam();
 			} else if (curveType == "inverse") {
-				float scaleParam = atten.GetScaleParam();
-				float linearParam = atten.GetLinearParam();
 				// TODO: Process inverse attenuation here.
+				// float scaleParam = atten.GetScaleParam();
+				// float linearParam = atten.GetLinearParam();
 			} else if (curveType == "inverse_square") {
-				float scaleParam = atten.GetScaleParam();
-				float quadraticParam = atten.GetQuadraticParam();
 				// TODO: Process inverse square attenuation here.
+				// float scaleParam = atten.GetScaleParam();
+				// float quadraticParam = atten.GetQuadraticParam();
 			} else {
 				ai_assert(false && "Invalid light curve type");
 			}
 		} else if (attenKind == "angle") {
-			float endParam = atten.GetEndParam();
 			// TODO: Process angular attenutation here.
+			// float endParam = atten.GetEndParam();
 		} else if (attenKind == "cos_angle") {
-			float endParam = atten.GetEndParam();
 			// TODO: Process attentuation angle here.
+			// float endParam = atten.GetEndParam();
 		}
 	}
 
@@ -833,7 +813,6 @@ private:
 
 	aiNode* ConvertNodeStructure(const NodeStructure& nodeStructure) {
 		ai_assert(IsNode(nodeStructure));
-		StructureType type = nodeStructure.GetStructureType();
 		switch (nodeStructure.GetStructureType()) {
 			case kStructureNode:         return ConvertNode(static_cast<const NodeStructure&>(nodeStructure));
 			case kStructureBoneNode:     return ConvertBoneNode(static_cast<const BoneNodeStructure&>(nodeStructure));

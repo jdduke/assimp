@@ -48,6 +48,7 @@
 #define OpenDDL_h
 
 
+#include "ODDLTypes.h"
 #include "ODDLArray.h"
 #include "ODDLString.h"
 #include "ODDLTree.h"

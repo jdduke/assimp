@@ -1307,7 +1307,7 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, double 
 
 		if ((c == 'x') || (c == 'X'))
 		{
-			unsigned_int64		v;
+			unsigned_int64		v = 0;
 
 			DataResult result = ReadHexadecimalLiteral(text, textLength, &v);
 			if (result == kDataIntegerOverflow)
@@ -1321,7 +1321,7 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, double 
 
 		if ((c == 'o') || (c == 'O'))
 		{
-			unsigned_int64		v;
+			unsigned_int64		v = 0;
 
 			DataResult result = ReadOctalLiteral(text, textLength, &v);
 			if (result == kDataIntegerOverflow)
@@ -1335,7 +1335,7 @@ DataResult Data::ReadFloatMagnitude(const char *text, int32 *textLength, double 
 
 		if ((c == 'b') || (c == 'B'))
 		{
-			unsigned_int64		v;
+			unsigned_int64		v = 0;
 
 			DataResult result = ReadBinaryLiteral(text, textLength, &v);
 			if (result == kDataIntegerOverflow)
